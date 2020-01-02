@@ -7,16 +7,6 @@ import cv2
 # TODO add pre/postcondition checks to functions
 
 
-def rgb2gray(rgb_image):
-    return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
-
-
-def apply_clahe(image):
-    """Applies CLAHE equalization to input image."""
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
-    return clahe.apply(image.astype(np.uint8))
-
-
 def adjust_gamma(image, gamma=1.0):
     """Adjusts image gamma. Works on both float and uint8 as expected. Float
     images must be in the range (0.0, 1.0)."""
@@ -31,13 +21,10 @@ def adjust_gamma(image, gamma=1.0):
     return adjusted
 
 
-def standardize(images):
-    """Standardizes an (N+1)-D block of N-D images by the usual method, i.e.
-    (x-u)/s."""
-    s = np.std(images)
-    u = np.mean(images)
-    standardized = (images - u) / s
-    return standardized
+def apply_clahe(image):
+    """Applies CLAHE equalization to input image."""
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
+    return clahe.apply(image.astype(np.uint8))
 
 
 def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))):
@@ -56,3 +43,16 @@ def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))
 
     med = (image - lo) / (hi - lo)
     return med * (out_range[1] - out_range[0]) + out_range[0]
+
+
+def rgb2gray(rgb_image):
+    return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
+
+
+def standardize(images):
+    """Standardizes an (N+1)-D block of N-D images by the usual method, i.e.
+    (x-u)/s."""
+    s = np.std(images)
+    u = np.mean(images)
+    standardized = (images - u) / s
+    return standardized

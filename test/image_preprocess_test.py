@@ -11,6 +11,7 @@ class Test(unittest.TestCase):
     def setUp(self):
         self.side_len = 400
         self.base_shape = (self.side_len, self.side_len)
+        self.test_image_path = PurePath("test") / "test.jpg"
 
     def generate_noise(self):
         octaves = 1
@@ -36,7 +37,7 @@ class Test(unittest.TestCase):
         return self.reduce_contrast(image)
 
     def read_image(self):
-        image = cv2.imread("test.jpg")
+        image = cv2.imread(str(self.test_image_path))
         image = rgb2gray(image)
         return self.reduce_contrast(image)
 

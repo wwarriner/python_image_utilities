@@ -9,20 +9,19 @@ from PIL import Image
 
 import file_utils
 
-# TODO make this, image_preprocess.py, and patch_extract.py into a more generic
-# TODO "image_stack" class
-
 # TODO add pre/postcondition checks
 
 
-def get_center(shape):
-    """Returns the center point of an image shape, rounded down."""
-    return [floor(x / 2) for x in shape]
+def deinterleave(c):
+    a = c[0::2]
+    b = c[1::2]
+    return a, b
 
 
 def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
     """Generates a circular field of view mask, with the interior of the circle
     included. The circle is assumed to be centered on the image shape."""
+
     center = get_center(shape)
     X, Y = np.meshgrid(np.arange(shape[0]) - center[0], np.arange(shape[1]) - center[1])
     R2 = (X - offset[0]) ** 2 + (Y - offset[1]) ** 2
@@ -31,44 +30,38 @@ def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
     return mask[..., np.newaxis]
 
 
+def get_center(shape):
+    """Returns the center point of an image shape, rounded down."""
+
+    return [floor(x / 2) for x in shape]
+
+
+def interleave(a, b):
+    c = np.empty((a.size + b.size), dtype=a.dtype)
+    c[0::2] = a
+    c[1::2] = b
+    return c
+
+
+def load(path):
+    if PurePath(path).suffix in (".gif"):
+        image = Image.open(path)
+        image = np.asarray(image)
+    else:
+        image = cv2.imread(path)
+    return image
+
+
 def load_folder(folder):
     image_files = file_utils.get_contents(folder)
     return [load(str(image_file)) for image_file in image_files]
 
 
-def save_images(path, name, images):
-    """name includes extension, i.e. 'out.png'.
-    Note that files are saved with an appropriately formatted number, i.e. if
-    name is 'out.png', 50 images will be saved as 'out_01.png' through
-    'out_50.png'. One image will be saved as 'out.png'.
-    images must be NHWC format, or a single HWC image."""
-    assert images.ndim in (3, 4)
-    if images.ndim == 3:
-        images = images[np.newaxis, ...]
-
-    ext = PurePath(name).suffix
-    base = PurePath(name).stem
-    count = images.shape[0]
-    if count <= 1:
-        digits = 0
-    else:
-        digits = ceil(log10(count - 1)) - 1
-
-    form = "{base:s}_{number:0{digits}d}{ext:s}"
-    if count == 1:
-        save(str(PurePath(path) / name), images[0])
-    else:
-        for i, image in enumerate(images):
-            full_name = form.format(base=base, number=i, digits=digits, ext=ext)
-            image_path = PurePath(path) / full_name
-            save(str(image_path), image)
-
-
-def stack(images):
-    if type(images) is np.ndarray:
-        images = (images,)
-    images = [image[..., np.newaxis] if image.ndim == 2 else image for image in images]
-    return np.stack(images)
+def mask_images(images, masks):
+    masked = images.copy()
+    threshold = (masks.max() - masks.min()) / 2.0
+    masked[masks <= threshold] = 0
+    return masked
 
 
 def montage(images, shape, mode="sequential", start=0):
@@ -85,37 +78,15 @@ def montage(images, shape, mode="sequential", start=0):
 
     montage = images[list(iterator)]
     montage = montage.reshape((*shape, *images.shape[1:]))
-    montage = montage.transpose((0, 2, 1, 3, 4))
+
+    a, b = deinterleave(list(range(0, montage.ndim - 1)))
+    a, b = list(a), list(b)
+    dim_order = (*a, *b, montage.ndim - 1)
+    montage = montage.transpose(dim_order)
 
     image_shape = np.array(shape) * np.array(images.shape[1:-1])
     image_shape = np.append(image_shape, images.shape[-1])
     return montage.reshape(image_shape)
-
-
-def save(path, image):
-    cv2.imwrite(path, image)
-
-
-def load(path):
-    if PurePath(path).suffix in (".gif"):
-        image = Image.open(path)
-        image = np.asarray(image)
-    else:
-        image = cv2.imread(path)
-    return image
-
-
-def interleave(a, b):
-    c = np.empty((a.size + b.size), dtype=a.dtype)
-    c[0::2] = a
-    c[1::2] = b
-    return c
-
-
-def deinterleave(c):
-    a = c[0::2]
-    b = c[1::2]
-    return a, b
 
 
 def patchify(images, patch_shape, *args, **kwargs):
@@ -149,6 +120,45 @@ def patchify(images, patch_shape, *args, **kwargs):
     return patches, patch_counts, out_padding
 
 
+def save(path, image):
+    cv2.imwrite(path, image)
+
+
+def save_images(path, name, images):
+    """name includes extension, i.e. 'out.png'. Note that files are saved with
+    an appropriately formatted number, i.e. if name is 'out.png', 50 images will
+    be saved as 'out_01.png' through 'out_50.png'. One image will be saved as
+    'out.png'. images must be NHWC format, or a single HWC image."""
+
+    assert images.ndim in (3, 4)
+    if images.ndim == 3:
+        images = images[np.newaxis, ...]
+
+    ext = PurePath(name).suffix
+    base = PurePath(name).stem
+    count = images.shape[0]
+    if count <= 1:
+        digits = 0
+    else:
+        digits = ceil(log10(count - 1)) - 1
+
+    form = "{base:s}_{number:0{digits}d}{ext:s}"
+    if count == 1:
+        save(str(PurePath(path) / name), images[0])
+    else:
+        for i, image in enumerate(images):
+            full_name = form.format(base=base, number=i, digits=digits, ext=ext)
+            image_path = PurePath(path) / full_name
+            save(str(image_path), image)
+
+
+def stack(images):
+    if type(images) is np.ndarray:
+        images = (images,)
+    images = [image[..., np.newaxis] if image.ndim == 2 else image for image in images]
+    return np.stack(images)
+
+
 def unpatchify(patches, patch_counts, padding):
     """patches has NHWC
     patch_counts has HW"""
@@ -172,13 +182,6 @@ def unpatchify(patches, patch_counts, padding):
     return images
 
 
-def mask_images(images, masks):
-    masked = images.copy()
-    threshold = (masks.max() - masks.min()) / 2.0
-    masked[masks <= threshold] = 0
-    return masked
-
-
 def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
     assert image.ndim in (2, 3)
     if image.ndim == 3:
@@ -190,8 +193,4 @@ def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
         cv2.imshow(tag, np.flip(image, axis=2))
     else:
         cv2.imshow(tag, image)
-    # HACK Next three lines force the window to the top.
-    # cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    # cv2.waitKey(1)
-    # cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
     cv2.waitKey(1)
