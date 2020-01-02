@@ -1,7 +1,4 @@
-from math import sqrt, floor
 import random
-
-import numpy as np
 
 from image_util import get_center
 
@@ -9,22 +6,10 @@ from image_util import get_center
 # TODO add pre/postcondition checks
 
 
-def get_corner_distances(center, shape, origin=[0, 0]):
-    """Returns squared distance of four corners of an axially-aligned rectangle
-    from the origin. Return value is sorted ascending by y first, then x."""
-    x, y = get_corners(center, shape, origin, lambda x: x ** 2)
-    return [x[i] + y[j] for i in [0, 1] for j in [0, 1]]
-
-
-def get_corners(center, shape, origin=[0, 0], fn=lambda x: x):
-    """Returns coordinates of four corners of axially-aligned rectangle from the
-    origin."""
-    mid = get_center(shape)
-    pos = [fn(c + m - o) for c, m, o in zip(center, mid, origin)]
-    neg = [fn(c - m - o) for c, m, o in zip(center, mid, origin)]
-    x = [neg[0], pos[0]]
-    y = [neg[1], pos[1]]
-    return x, y
+def extract_patch(image, patch_shape, patch_center):
+    """Extracts a rectangular patch from an image."""
+    x, y = get_corners(patch_center, patch_shape)
+    return image[x[0] : x[1], y[0] : y[1], ...]
 
 
 def generate_random_image_point(image_shape, patch_shape):
@@ -66,7 +51,19 @@ def generate_random_patch(
         return patch, aux_patch
 
 
-def extract_patch(image, patch_shape, patch_center):
-    """Extracts a rectangular patch from an image."""
-    x, y = get_corners(patch_center, patch_shape)
-    return image[x[0] : x[1], y[0] : y[1], ...]
+def get_corners(center, shape, origin=[0, 0], fn=lambda x: x):
+    """Returns coordinates of four corners of axially-aligned rectangle from the
+    origin."""
+    mid = get_center(shape)
+    pos = [fn(c + m - o) for c, m, o in zip(center, mid, origin)]
+    neg = [fn(c - m - o) for c, m, o in zip(center, mid, origin)]
+    x = [neg[0], pos[0]]
+    y = [neg[1], pos[1]]
+    return x, y
+
+
+def get_corner_distances(center, shape, origin=[0, 0]):
+    """Returns squared distance of four corners of an axially-aligned rectangle
+    from the origin. Return value is sorted ascending by y first, then x."""
+    x, y = get_corners(center, shape, origin, lambda x: x ** 2)
+    return [x[i] + y[j] for i in [0, 1] for j in [0, 1]]
