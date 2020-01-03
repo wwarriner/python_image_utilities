@@ -17,7 +17,10 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
     bg = background.copy()
     if bg.dtype == np.uint8:
         bg = bg.astype(np.float) / 255.0
-    fg = np.stack([c * foreground for c in color], axis=-1) / 255.0
+    fg = foreground.copy()
+    if fg.dtype == np.uint8:
+        fg = fg.astype(np.float) / 255.0
+    fg = np.stack([c * fg for c in color], axis=-1)
     return cv2.addWeighted(fg, alpha, bg, beta, gamma)
 
 
