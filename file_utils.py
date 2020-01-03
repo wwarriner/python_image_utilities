@@ -9,4 +9,8 @@ def create_glob(ext=None):
     if ext is None:
         return "*"
     else:
-        return "*{}".format(ext)
+        return "*{}".format(normalize_ext(ext))
+
+
+def normalize_ext(ext):
+    return "." + str(ext).lstrip(".")
