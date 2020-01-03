@@ -1,4 +1,4 @@
-from pathlib import PurePath, Path
+from pathlib import Path
 
 
 def get_contents(folder, ext=None):

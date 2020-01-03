@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 from PIL import Image
 
-import file_utils
+from . import file_utils
 
 # TODO add pre/postcondition checks
 
