@@ -1,6 +1,6 @@
 from math import floor, ceil, log10
 from pathlib import PurePath
-from itertools import cycle, islice
+from itertools import chain, cycle, islice
 from random import shuffle
 
 import numpy as np
@@ -64,19 +64,46 @@ def mask_images(images, masks):
     return masked
 
 
-def montage(images, shape, mode="sequential", start=0):
+def optimize_shape(count, width_height_aspect_ratio=1.0):
+    N = count
+    W = np.arange(1, N).astype(np.uint32)
+    H = np.ceil(N / W).astype(np.uint32)
+    closest = np.argmin(np.abs((W / H) - width_height_aspect_ratio))
+    return H[closest], W[closest]
+
+
+def get_image_or_blank(images, index):
+    try:
+        return images[index]
+    except Exception as e:
+        return np.zeros(images.shape[1:], dtype=images.dtype)
+
+
+def montage(images, shape=None, mode="sequential", repeat=False, start=0):
+    image_count = images.shape[0] - start
+    if shape is None:
+        shape = optimize_shape(image_count)
+    elif isinstance(shape, (int, float)):
+        shape = optimize_shape(image_count, width_height_aspect_ratio=shape)
+
     indices = list(range(images.shape[0]))
+
     if mode == "random":
-        shuffle(indices)
+        shuffle(images)
     elif mode == "sequential":
         pass
     else:
         assert False
-    iterator = cycle(indices)
+
+    if repeat:
+        iterator = cycle(indices)
+    else:
+        iterator = chain(indices, cycle([float("inf")]))
+
     stop = np.array(shape).prod() + start
     iterator = islice(iterator, start, stop)
 
-    montage = images[list(iterator)]
+    montage = np.stack([get_image_or_blank(images, i) for i in iterator])
     montage = montage.reshape((*shape, *images.shape[1:]))
 
     a, b = deinterleave(list(range(0, montage.ndim - 1)))

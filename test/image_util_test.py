@@ -52,14 +52,28 @@ class Test(unittest.TestCase):
         count = patches.shape[0]
         montage_len = floor(count ** 0.5)
         montage_shape = (montage_len, montage_len)
-        m = montage(patches, montage_shape, mode="random")
-        self.show(m, "test: shuffled")
-        # permute for visibility
-        m = montage(patches, montage_shape, mode="sequential", start=0)
+        # sequential order (baseline)
+        m = montage(patches, montage_shape)
         self.show(m, "test: sequential")
-        # different start
-        m = montage(patches, montage_shape, mode="sequential", start=3)
-        self.show(m, "test: sequential start=10")
+        # random order
+        m = montage(patches, montage_shape, mode="random")
+        self.show(m, "test: random")
+        # non-zero start
+        start = 5 * count // 13
+        m = montage(patches, montage_shape, mode="random", start=start)
+        self.show(m, "test: start={}".format(start))
+        # with repeats
+        m = montage(patches, montage_shape, mode="random", repeat=True, start=start)
+        self.show(m, "test: with repeats")
+        # auto shape
+        m = montage(patches, mode="random", repeat=True, start=start)
+        self.show(m, "test: with auto-shape")
+        # defined aspect ratio
+        m = montage(patches, 2.0, mode="random", repeat=True, start=start)
+        self.show(m, "test: with auto-shape")
+        # defined aspect ratio
+        m = montage(patches, 2.0, mode="random", start=start)
+        self.show(m, "test: with auto-shape")
 
     def test_patchify(self):
         counts = np.array(
