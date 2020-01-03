@@ -47,6 +47,12 @@ class Test(unittest.TestCase):
         cv2.waitKey(self.wait_time)
         cv2.destroyWindow(tag)
 
+    def test_overlay(self):
+        image = self.read_image()
+        noise = generate_noise(image.shape)
+        color = [0.0, 1.0, 0.0]
+        self.show(overlay(image, noise, color, alpha=0.2, beta=0.8), "test: overlay")
+
     def test_montage(self):
         patches, _, _ = patchify(self.rgb, self.patch_shape)
         count = patches.shape[0]

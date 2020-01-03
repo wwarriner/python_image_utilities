@@ -3,13 +3,39 @@ from pathlib import PurePath
 from itertools import chain, cycle, islice
 from random import shuffle
 
-import numpy as np
 import cv2
+import noise
+import numpy as np
 from PIL import Image
 
 import file_utils
 
 # TODO add pre/postcondition checks
+
+
+def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
+    bg = background.copy()
+    if bg.dtype == np.uint8:
+        bg = bg.astype(np.float) / 255.0
+    fg = np.stack([c * foreground for c in color], axis=-1) / 255.0
+    return cv2.addWeighted(fg, alpha, bg, beta, gamma)
+
+
+def generate_noise(shape, offsets=None):
+    if offsets is None:
+        scale = 0.1 * np.array(shape).max()
+        offsets = np.random.uniform(-1000 * scale, 1000 * scale, 2)
+
+    octaves = 1
+    X, Y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+    X = X + offsets[0]
+    Y = Y + offsets[1]
+    noise_maker = np.vectorize(
+        lambda x, y: noise.pnoise2(x / scale, y / scale, octaves=octaves)
+    )
+    n = noise_maker(X, Y)
+    n = ((n - n.min()) / (n.max() - n.min())) * 255
+    return n.astype(np.uint8)
 
 
 def deinterleave(c):

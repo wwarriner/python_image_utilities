@@ -1,7 +1,6 @@
 import unittest
 
 import numpy as np
-import noise
 
 from image_preprocess import *
 from image_util import *
@@ -13,27 +12,13 @@ class Test(unittest.TestCase):
         self.base_shape = (self.side_len, self.side_len)
         self.test_image_path = PurePath("test") / "test.jpg"
 
-    def generate_noise(self):
-        octaves = 1
-        scale = self.side_len * 0.1
-        offsets = np.random.uniform(-1000 * self.side_len, 1000 * self.side_len, 2)
-        X, Y = np.meshgrid(np.arange(self.base_shape[0]), np.arange(self.base_shape[1]))
-        X = X + offsets[0]
-        Y = Y + offsets[0]
-        noise_maker = np.vectorize(
-            lambda x, y: noise.pnoise2(x / scale, y / scale, octaves=octaves)
-        )
-        n = noise_maker(X, Y)
-        n = ((n - n.min()) / (n.max() - n.min())) * 255
-        return n.astype(np.uint8)
-
     def reduce_contrast(self, image):
         factor = 3.0
         minimum = 50
         return (np.round(image / factor) + 50).astype(np.uint8)
 
     def generate_image(self):
-        image = self.generate_noise()
+        image = generate_noise(self.base_shape)
         return self.reduce_contrast(image)
 
     def read_image(self):
