@@ -52,7 +52,7 @@ def load(path):
     return image
 
 
-def load_folder(folder, ext):
+def load_images(folder, ext):
     image_files = file_utils.get_contents(folder, ext)
     return [load(str(image_file)) for image_file in image_files]
 
