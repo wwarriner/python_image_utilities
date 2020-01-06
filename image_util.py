@@ -99,7 +99,8 @@ def load(path):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     else:
         image = Image.open(path)
-    return np.array(image)
+        image = np.array(image)
+    return image
 
 
 def load_images(folder, ext):
