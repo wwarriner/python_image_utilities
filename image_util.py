@@ -71,12 +71,9 @@ def get_center(shape):
 
 
 def load(path):
-    if PurePath(path).suffix in (".gif"):
+    """Returns image in RGB or grayscale format."""
         image = Image.open(path)
-        image = np.asarray(image)
-    else:
-        image = cv2.imread(path)
-    return image
+    return np.asarray(image)
 
 
 def load_images(folder, ext):
@@ -222,7 +219,8 @@ def rgb2gray(rgb_image):
 
 
 def save(path, image):
-    cv2.imwrite(path, image)
+    im = Image.fromarray(image)
+    im.save(path)
 
 
 def save_images(path, name, images):
@@ -302,16 +300,15 @@ def unpatchify(patches, patch_counts, padding):
     return images
 
 
-def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
+def show(image, tag="UNLABELED_WINDOW"):
     assert image.ndim in (2, 3)
     if image.ndim == 3:
         assert image.shape[-1] in (1, 3)
 
     cv2.namedWindow(tag, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(tag, image.shape[0:2][::-1])
-    if is_opencv and image.ndim == 3 and image.shape[-1] == 3:
-        cv2.imshow(tag, np.flip(image, axis=2))
-    else:
+    if image.shape[-1] == 3:
+        image = image[..., ::-1]
         cv2.imshow(tag, image)
     cv2.waitKey(1)
 
