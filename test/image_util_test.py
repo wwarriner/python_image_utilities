@@ -27,22 +27,26 @@ class Test(unittest.TestCase):
         )
         self.mask_shape = self.mask.shape
 
-        self.wait_time = 200
+        self.wait_time = 500
 
         # ! set to be relatively prime to side_len
         # ! different to check correct reshaping
         self.patch_shape = (12, 13)
 
         self.test_image_path = PurePath("test") / "test.jpg"
+        self.tulips_image_path = PurePath("test") / "tulips.png"
 
     def tearDown(self):
         pass
 
-    def read_image(self):
-        return cv2.imread(str(self.test_image_path))
+    def read_test_image(self):
+        return load(str(self.test_image_path))
 
-    def show(self, image, tag, is_opencv=True):
-        visualize(image, tag, is_opencv)
+    def read_tulips_image(self):
+        return load(str(self.tulips_image_path))
+
+    def show(self, image, tag):
+        show(image, tag)
         cv2.moveWindow(tag, 100, 100)
         cv2.waitKey(self.wait_time)
         cv2.destroyWindow(tag)
@@ -74,11 +78,15 @@ class Test(unittest.TestCase):
     def rescale(self, image):
         return rescale(image, out_range=(0, 255)).astype(np.uint8)
 
-    def test_overlay(self):
-        image = self.read_image()
-        noise = generate_noise(image.shape)
-        color = [0.5, 1.0, 0.2]
-        self.show(overlay(image, noise, color, alpha=0.2, beta=0.8), "test: overlay")
+    def test_adjust_gamma(self):
+        self.run_fn(self.read_gray_image(), adjust_gamma, 2.0)
+        self.run_fn(self.generate_image(), adjust_gamma, 2.0)
+        # TODO add structured assertions here
+
+    def test_apply_clahe(self):
+        self.run_fn(self.read_gray_image(), clahe)
+        self.run_fn(self.generate_image(), clahe)
+        # TODO add structured assertions here
 
     def test_montage(self):
         patches, _, _ = patchify(self.rgb, self.patch_shape)
@@ -108,6 +116,12 @@ class Test(unittest.TestCase):
         m = montage(patches, 2.0, mode="random", start=start)
         self.show(m, "test: with auto-shape")
 
+    def test_overlay(self):
+        image = self.read_test_image()
+        noise = generate_noise(image.shape)[..., np.newaxis]
+        color = [0.5, 1.0, 0.2]
+        self.show(overlay(image, noise, color, alpha=0.2, beta=0.8), "test: overlay")
+
     def test_patchify(self):
         counts = np.array(
             [ceil(x / y) for x, y in zip(self.rgb.shape, self.patch_shape)]
@@ -129,6 +143,11 @@ class Test(unittest.TestCase):
         self.assertEqual(len(padding), 2)
         self.assertTrue((padding == reqd_padding.ravel()).all())
 
+    def test_rescale(self):
+        self.run_fn(self.read_gray_image(), self.rescale)
+        self.run_fn(self.generate_image(), self.rescale)
+        # TODO add structured assertions here
+
     def test_save_load(self):
         try:
             path = PurePath("image_util_test_output.png")
@@ -139,12 +158,26 @@ class Test(unittest.TestCase):
             if Path(path).is_file():
                 Path(path).unlink()
 
+    def test_show(self):
+        self.show(self.rgb.astype(np.uint8), "test: visualize_rgb (blue and green?)")
+        self.show(self.rgb[..., 0], "test: visualize_gray (is gradient?)")
+        self.show(
+            (self.mask * 255).astype(np.uint8), "test: visualize_gray (is circle?)"
+        )
+        self.show(rgb2gray(self.read_tulips_image()), "test: visualize_gray (is gray?)")
+        self.show(self.read_tulips_image(), "test: visualize_color (is color?)")
+
     def test_stack(self):
         n = 3
         s = stack(n * (self.rgb,))
         self.assertEqual(s.shape[0], n)
         self.assertEqual(s.shape[1:], self.rgb.shape[0:])
         self.assertIsInstance(s, np.ndarray)
+
+    def test_standardize(self):
+        self.run_fn(self.read_gray_image(), self.standardize)
+        self.run_fn(self.generate_image(), self.standardize)
+        # TODO add structured assertions here
 
     def test_unpatchify(self):
         input_images = np.stack((self.rgb, self.rgb))
@@ -154,46 +187,8 @@ class Test(unittest.TestCase):
         self.assertEqual(images.shape, input_images.shape)
         self.assertTrue((input_images == images).all())
 
-    def test_visualize(self):
-        self.show(
-            self.rgb.astype(np.uint8),
-            "test: visualize_bgr (red and green??)",
-            is_opencv=True,
-        )
-        self.show(
-            self.rgb.astype(np.uint8),
-            "test: visualize_rgb (blue and green??)",
-            is_opencv=False,
-        )
-        self.show(
-            (self.mask * 255).astype(np.uint8), "test: visualize_gray (is circle?)"
-        )
-        self.show(self.rgb[..., 0], "test: visualize_gray (is gradient?)")
-        self.show(self.read_image(), "test: visualize_gray (is beachscape?)")
-
-    def test_apply_clahe(self):
-        self.run_fn(self.read_gray_image(), clahe)
-        self.run_fn(self.generate_image(), clahe)
-
-    def test_standardize(self):
-        self.run_fn(self.read_gray_image(), self.standardize)
-        self.run_fn(self.generate_image(), self.standardize)
-        # TODO add structured assertions here
-
-    def test_rescale(self):
-        self.run_fn(self.read_gray_image(), self.rescale)
-        self.run_fn(self.generate_image(), self.rescale)
-        # TODO add structured assertions here
-
-    def test_adjust_gamma(self):
-        self.run_fn(self.read_gray_image(), adjust_gamma, 2.0)
-        self.run_fn(self.generate_image(), adjust_gamma, 2.0)
-        # TODO add structured assertions here
-
     # TODO test_load_folder
     # TODO test_save_images
-    # TODO test_interleave
-    # TODO test_deinterleave
     # TODO test_mask_images
     # TODO test_get_center
     # TODO test_generate_circular_fov_mask
