@@ -171,7 +171,7 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=
     if foreground.dtype == np.uint8:
         foreground = uint8_to_float(foreground)
     if foreground.ndim == background.ndim:
-        foreground = np.squeeze(foreground, axis=-1)
+        foreground = foreground.squeeze(axis=-1)
 
     foreground = np.stack([c * foreground for c in color], axis=-1)
     out = cv2.addWeighted(foreground, alpha, background, beta, gamma)
@@ -246,6 +246,8 @@ def rgb2lab(rgb_image):
 
 
 def save(path, image):
+    if image.shape[-1] == 1:
+        image = image.squeeze(axis=-1)
     im = Image.fromarray(image)
     im.save(path)
 
