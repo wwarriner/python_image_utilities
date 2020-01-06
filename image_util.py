@@ -12,8 +12,9 @@ import file_utils
 
 
 def adjust_gamma(image, gamma=1.0):
-    """Adjusts image gamma. Works on both float and uint8 as expected. Float
-    images must be in the range (0.0, 1.0)."""
+    """Adjusts image gamma. Works on both float and uint8 images. Float images
+    should be in the range (0.0, 1.0) for expected behavior.
+    """
     igamma = 1.0 / gamma
     if np.issubdtype(image.dtype, np.floating):
         out = image ** igamma
@@ -26,7 +27,10 @@ def adjust_gamma(image, gamma=1.0):
 
 
 def clahe(image):
-    """Applies CLAHE equalization to input image."""
+    """Applies CLAHE equalization to input image. Works on both float and uint8
+    images. Works on color images by converting to Lab space and treating the L
+    channel as grayscale.
+    """
     is_float = np.issubdtype(image.dtype, np.floating)
     if is_float:
         image = float_to_uint8(image)
@@ -46,14 +50,18 @@ def clahe(image):
 
 
 def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
+    """Converts a float image to a uint8 image. Image is rescaled with input
+    range equal to float_range. If clip is set to True, values are clipped
+    following conversion.
+    """
     uint8_image = rescale(float_image, out_range=(0.0, 255.0), in_range=float_range)
     return uint8_image.astype(np.uint8)
 
 
 def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
     """Generates a circular field of view mask, with the interior of the circle
-    included. The circle is assumed to be centered on the image shape."""
-
+    included. The circle is assumed to be centered on the image shape.
+    """
     center = get_center(shape)
     X, Y = np.meshgrid(np.arange(shape[0]) - center[0], np.arange(shape[1]) - center[1])
     R2 = (X - offset[0]) ** 2 + (Y - offset[1]) ** 2
@@ -63,6 +71,9 @@ def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
 
 
 def generate_noise(shape, offsets=None):
+    """Generates a grayscale image with single-octave Perlin noise. Useful for
+    testing.
+    """
     if offsets is None:
         scale = 0.1 * np.array(shape).max()
         offsets = np.random.uniform(-1000 * scale, 1000 * scale, 2)
@@ -80,22 +91,30 @@ def generate_noise(shape, offsets=None):
 
 
 def get_center(shape):
-    """Returns the center point of an image shape, rounded down."""
+    """Returns the coordinates of the center point of an image in pixels,
+    rounded down.
+    """
     return [floor(x / 2) for x in shape]
 
 
 def gray2rgb(gray_image):
+    """Converts a grayscale image to an RGB image.
+    """
     if gray_image.shape[-1] == 1:
         gray_image = gray_image.squeeze(-1)
     return np.stack([gray_image for _ in range(3)], axis=-1)
 
 
 def lab2rgb(lab_image):
+    """Converts an Lab image to an RGB image.
+    """
     return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
 
 
 def load(path):
-    """Returns image in RGB or grayscale format."""
+    """Loads an image from the supplied path in grayscale or RGB depending on
+    the source.
+    """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
         image = cv2.imread(path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -105,20 +124,61 @@ def load(path):
     return image
 
 
-def load_images(folder, ext):
+def load_images(folder, ext=None):
+    """Loads a folder of images. If an extension is supplied, only images with
+    that extension will be loaded.
+    """
     image_files = file_utils.get_contents(folder, ext)
     return [load(str(image_file)) for image_file in image_files]
 
 
 def mask_images(images, masks):
+    """Masks out pixels in an image stack based on the masks. There must be
+    either one mask, or the same number of images and masks.
+    """
+    if masks.shape[0] == 1:
+        masks = np.repeat(masks, images.shape[0], axis=0)
+    assert masks.shape[0] == images.shape[0]
+
     masked = images.copy()
     threshold = (masks.max() - masks.min()) / 2.0
     masked[masks <= threshold] = 0
     return masked
 
 
-def montage(images, shape=None, mode="sequential", repeat=False, start=0):
-    image_count = images.shape[0] - start
+def montage(
+    images, shape=None, mode="sequential", repeat=False, start=0, maximum_images=36
+):
+    """Generates a montage image from an image stack.
+
+    shape determines the number of images to tile in each dimension. Must be an
+    iterable of length 2 containing positive integers, or a single positive
+    float, or None. If a float is provided, that value is assumed to be a
+    width-to-height aspect ratio and the shape is computed to best fit that
+    aspect ratio. If None is provided, the aspect ratio is set to 1. In both
+    latter cases, the montage has tiles at least equal to the number of images
+    in the stack if maximum_images is not also set. Default is None.
+
+    mode determines how to sample images from the stack. Must be either
+    "sequential" or "random". If "sequential", the images are sampled in the
+    order they appear in the stack. If "random", then the stack order is
+    shuffled before sampling. Default is "sequential".
+
+    repeat determines whether to sample the stack from the start if more images
+    are requested than exist in the stack. If repeat is set to False and more
+    images are requested than exist, the remaining tiles are filled with zeros,
+    i.e. black. Default is False.
+
+    start determines the starting index for sampling the stack. Default is 0.
+
+    maximum_images determines the limit of images to be sampled from the stack,
+    regardless of shape. Default is 36.
+    """
+    if maximum_images is None:
+        image_count = images.shape[0] - start
+    else:
+        image_count = maximum_images
+
     if shape is None:
         shape = _optimize_shape(image_count)
     elif isinstance(shape, (int, float)):
@@ -155,10 +215,16 @@ def montage(images, shape=None, mode="sequential", repeat=False, start=0):
 
 
 # TODO fix issue with different channel counts, i.e. gray to rgb for both inputs
-def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=False):
-    """Applies a color to grayscale foreground and blends with background.
-    Background may be RGB or grayscale. Foreground and background may be float
-    or uint8. Output is RGB with the same dtype as background."""
+def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=False):
+    """Applies a color to the supplied grayscale foreground and then blends it
+    with the background using mixing ratio parameters alpha and beta. Background
+    may be RGB or grayscale. Foreground and background may both be either float
+    or uint8. Output is RGB with the same dtype as background. Gamma is a
+    constant ratio parameter to add to all pixels.
+
+    Note that if the sum of alpha, beta and gamma is greater than 1.0, clipping
+    can occur.
+    """
     assert np.issubdtype(background.dtype, np.floating) or background.dtype == np.uint8
     assert background.shape[-1] in (1, 3)
     assert np.issubdtype(foreground.dtype, np.floating) or foreground.dtype == np.uint8
@@ -184,8 +250,20 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=
 
 
 def patchify(images, patch_shape, *args, **kwargs):
-    """images has NHWC
-    patch_shape has HW"""
+    """Transforms an image stack into a new stack made of tiled patches from
+    images of the original stack. The size of the patches is determined by
+    patch_shape. If patch_shape does not evenly divide the image shape, the
+    excess is padded with zeros, i.e. black.
+
+    If there are N images of size X by Y, and patches of size M by N are
+    requested, then the resulting stack will have N * ceil(X/M) * ceil(Y/N)
+    images. The first ceil(X/M) * ceil(Y/N) patches all come from the first
+    image, sampled along X first, then Y.
+
+    Returns a tuple consisting of an image stack of patches, the number of
+    patches in each dimension, and the padding used. The latter two values are
+    used for unpatching.
+    """
     assert images.ndim in (3, 4)
     if images.ndim == 3:
         images = images[np.newaxis, ...]
@@ -218,7 +296,9 @@ def patchify(images, patch_shape, *args, **kwargs):
 def rescale(
     image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf")), clip=False
 ):
-    """Rescales image from in_range to out_range while retaining input dtype."""
+    """Rescales image from in_range to out_range while retaining input dtype. If
+    clip is set to True, the resulting image values are clipped to out_range.
+    """
     lo = in_range[0]
     if lo == float("-inf") or isnan(lo):
         lo = np.min(image)
@@ -241,25 +321,34 @@ def rescale(
 
 
 def rgb2gray(rgb_image):
+    """Converts an RGB image to grayscale.
+    """
     return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 
 
 def rgb2lab(rgb_image):
+    """Converts an RGB image to Lab.
+    """
     return cv2.cvtColor(rgb_image, cv2.COLOR_LAB2RGB)
 
 
 def save(path, image):
+    """Saves an image to disk at the location specified by path.
+    """
     if image.shape[-1] == 1:
         image = image.squeeze(axis=-1)
     im = Image.fromarray(image)
     im.save(path)
 
 
-def save_images(path, name, images):
-    """name includes extension, i.e. 'out.png'. Note that files are saved with
-    an appropriately formatted number, i.e. if name is 'out.png', 50 images will
-    be saved as 'out_01.png' through 'out_50.png'. One image will be saved as
-    'out.png'. images must be NHWC format, or a single HWC image."""
+def save_images(path, name, images, delimiter="_"):
+    """Saves an image stack to disk as individual images using save() with index
+    appended to the supplied file name, joined by delimiter.
+
+    path is an existing folder on disk.
+    name is the desired file name.
+    images is the image stack.
+    """
 
     assert images.ndim in (3, 4)
     if images.ndim == 3:
@@ -273,17 +362,22 @@ def save_images(path, name, images):
     else:
         digits = ceil(log10(count - 1)) - 1
 
-    form = "{base:s}_{number:0{digits}d}{ext:s}"
+    form = "{base:s}{delimiter:s}{number:0{digits}d}{ext:s}"
     if count == 1:
         save(str(PurePath(path) / name), images[0])
     else:
         for i, image in enumerate(images):
-            full_name = form.format(base=base, number=i, digits=digits, ext=ext)
+            full_name = form.format(
+                base=base, delimiter=delimiter, number=i, digits=digits, ext=ext
+            )
             image_path = PurePath(path) / full_name
             save(str(image_path), image)
 
 
 def stack(images):
+    """Converts a single image or an iterable of images to an image stack. An
+    image stack is a numpy array whose first dimension is the image index.
+    """
     if type(images) is np.ndarray:
         images = (images,)
     images = [image[..., np.newaxis] if image.ndim == 2 else image for image in images]
@@ -296,7 +390,8 @@ def standardize(images):
 
     This function is intended to be used just before application of a machine
     learning model, or for training such a model. There is no guarantee the
-    output will be in the usual (0.0, 1.0) range."""
+    output will be in the usual (0.0, 1.0) range.
+    """
     s = np.std(images)
     u = np.mean(images)
     standardized = (images - u) / s
@@ -304,14 +399,18 @@ def standardize(images):
 
 
 def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
+    """Converts a uint8 image to a float image. If clip is set to True, values
+    are clipped to float_range."""
     return rescale(
         uint8_image.astype(np.float), in_range=(0.0, 255.0), out_range=float_range
     )
 
 
 def unpatchify(patches, patch_counts, padding):
-    """patches has NHWC
-    patch_counts has HW"""
+    """Inverse of patchify(). Transforms an image stack of patches back to their
+    original images. Requires the patch_counts and padding returned by
+    patchify().
+    """
     chunk_len = np.array(patch_counts).prod()
     base_shape = np.array(patch_counts) * np.array(patches.shape[1:-1])
     image_shape = np.append(base_shape, patches.shape[-1])
@@ -333,6 +432,8 @@ def unpatchify(patches, patch_counts, padding):
 
 
 def show(image, tag="UNLABELED_WINDOW"):
+    """Displays an image in a new window labeled with tag.
+    """
     assert image.ndim in (2, 3)
     if image.ndim == 3:
         assert image.shape[-1] in (1, 3)
@@ -346,6 +447,8 @@ def show(image, tag="UNLABELED_WINDOW"):
 
 
 def _deinterleave(c):
+    """Separates two interleaved sequences into a tuple of two sequences of the same type.
+    """
     a = c[0::2]
     b = c[1::2]
     return a, b
@@ -359,6 +462,8 @@ def _get_image_or_blank(images, index):
 
 
 def _interleave(a, b):
+    """Interleaves two sequences of the same type into a single sequence.
+    """
     c = np.empty((a.size + b.size), dtype=a.dtype)
     c[0::2] = a
     c[1::2] = b
@@ -366,6 +471,9 @@ def _interleave(a, b):
 
 
 def _optimize_shape(count, width_height_aspect_ratio=1.0):
+    """Computes the optimal X by Y shape of count objects given a desired
+    width-to-height aspect ratio.
+    """
     N = count
     W = np.arange(1, N).astype(np.uint32)
     H = np.ceil(N / W).astype(np.uint32)
