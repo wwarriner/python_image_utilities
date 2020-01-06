@@ -85,7 +85,9 @@ def get_center(shape):
 
 
 def gray2rgb(gray_image):
-    return cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
+    if gray_image.shape[-1] == 1:
+        gray_image = gray_image.squeeze(-1)
+    return np.stack([gray_image for _ in range(3)], axis=-1)
 
 
 def lab2rgb(lab_image):
@@ -170,10 +172,11 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=
 
     if foreground.dtype == np.uint8:
         foreground = uint8_to_float(foreground)
-    if foreground.ndim == background.ndim:
-        foreground = foreground.squeeze(axis=-1)
+    foreground = gray2rgb(foreground)
 
-    foreground = np.stack([c * foreground for c in color], axis=-1)
+    color = np.array(color)
+    color = color[np.newaxis][np.newaxis]
+    foreground = foreground * color
     out = cv2.addWeighted(foreground, alpha, background, beta, gamma)
     if background.dtype == np.uint8:
         out = float_to_uint8(out, clip=clip)
