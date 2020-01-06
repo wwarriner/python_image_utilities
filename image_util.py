@@ -31,9 +31,8 @@ def clahe(image):
     return clahe.apply(image.astype(np.uint8))
 
 
-def float_to_uint8(float_image, float_range=(0.0, 1.0)):
+def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
     uint8_image = rescale(float_image, out_range=(0.0, 255.0), in_range=float_range)
-    uint8_image = np.round(uint8_image)
     return uint8_image.astype(np.uint8)
 
 
@@ -134,14 +133,14 @@ def montage(images, shape=None, mode="sequential", repeat=False, start=0):
 
 
 # TODO fix issue with different channel counts, i.e. gray to rgb for both inputs
-def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
+def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=False):
     """Applies a color to grayscale foreground and blends with background.
     Background may be RGB or grayscale. Foreground and background may be float
-    or uint8. Output is RGB with the same dtype as ."""
-    assert background.dtype in (np.uint8, np.float)
+    or uint8. Output is RGB with the same dtype as background."""
+    assert np.issubdtype(background.dtype, np.floating) or background.dtype == np.uint8
     assert background.shape[-1] in (1, 3)
-    assert foreground.dtype in (np.uint8, np.float)
-    assert foreground.shape[-1] == 1 or foreground.ndim == background.ndim - 1
+    assert np.issubdtype(foreground.dtype, np.floating) or foreground.dtype == np.uint8
+    assert foreground.shape[-1] == 1
     assert len(color) == 3
 
     if background.dtype == np.uint8:
@@ -151,9 +150,14 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
 
     if foreground.dtype == np.uint8:
         foreground = uint8_to_float(foreground)
+    if foreground.ndim == background.ndim:
+        foreground = np.squeeze(foreground, axis=-1)
 
     foreground = np.stack([c * foreground for c in color], axis=-1)
-    return cv2.addWeighted(foreground, alpha, background, beta, gamma)
+    out = cv2.addWeighted(foreground, alpha, background, beta, gamma)
+    if background.dtype == np.uint8:
+        out = float_to_uint8(out, clip=clip)
+    return out
 
 
 def patchify(images, patch_shape, *args, **kwargs):
@@ -188,7 +192,9 @@ def patchify(images, patch_shape, *args, **kwargs):
     return patches, patch_counts, out_padding
 
 
-def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))):
+def rescale(
+    image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf")), clip=False
+):
     """Rescales image from in_range to out_range while retaining input dtype."""
     lo = in_range[0]
     if lo == float("-inf") or isnan(lo):
@@ -206,6 +212,8 @@ def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))
     out = med * (out_range[1] - out_range[0]) + out_range[0]
     if np.issubdtype(image.dtype, np.integer):
         out = np.round(out)
+    if clip:
+        out = np.clip(out, out_range[0], out_range[1])
     return out.astype(image.dtype)
 
 
@@ -265,10 +273,10 @@ def standardize(images):
     return standardized
 
 
-def uint8_to_float(uint8_image, float_range=(0.0, 1.0)):
-    float_image = uint8_image / 255.0
-    float_image = rescale(float_image, out_range=float_range)
-    return float_image
+def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
+    return rescale(
+        uint8_image.astype(np.float), in_range=(0.0, 255.0), out_range=float_range
+    )
 
 
 def unpatchify(patches, patch_counts, padding):
