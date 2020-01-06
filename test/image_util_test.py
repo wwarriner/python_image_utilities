@@ -47,6 +47,33 @@ class Test(unittest.TestCase):
         cv2.waitKey(self.wait_time)
         cv2.destroyWindow(tag)
 
+    def reduce_contrast(self, image):
+        factor = 3.0
+        minimum = 50
+        return (np.round(image / factor) + 50).astype(np.uint8)
+
+    def generate_image(self):
+        image = generate_noise(self.base_shape)
+        return self.reduce_contrast(image)
+
+    def read_gray_image(self):
+        image = cv2.imread(str(self.test_image_path))
+        image = rgb2gray(image)
+        return self.reduce_contrast(image)
+
+    def run_fn(self, image, fn, *args, **kwargs):
+        out = fn(image, *args, **kwargs)
+        vis = np.concatenate((image, out), axis=0)
+        tag = "test: {}".format(fn.__name__)
+        self.show(vis, tag)
+
+    def standardize(self, image):
+        standardized = standardize(image)
+        return self.rescale(standardized)
+
+    def rescale(self, image):
+        return rescale(image, out_range=(0, 255)).astype(np.uint8)
+
     def test_overlay(self):
         image = self.read_image()
         noise = generate_noise(image.shape)
@@ -143,6 +170,25 @@ class Test(unittest.TestCase):
         )
         self.show(self.rgb[..., 0], "test: visualize_gray (is gradient?)")
         self.show(self.read_image(), "test: visualize_gray (is beachscape?)")
+
+    def test_apply_clahe(self):
+        self.run_fn(self.read_gray_image(), clahe)
+        self.run_fn(self.generate_image(), clahe)
+
+    def test_standardize(self):
+        self.run_fn(self.read_gray_image(), self.standardize)
+        self.run_fn(self.generate_image(), self.standardize)
+        # TODO add structured assertions here
+
+    def test_rescale(self):
+        self.run_fn(self.read_gray_image(), self.rescale)
+        self.run_fn(self.generate_image(), self.rescale)
+        # TODO add structured assertions here
+
+    def test_adjust_gamma(self):
+        self.run_fn(self.read_gray_image(), adjust_gamma, 2.0)
+        self.run_fn(self.generate_image(), adjust_gamma, 2.0)
+        # TODO add structured assertions here
 
     # TODO test_load_folder
     # TODO test_save_images
