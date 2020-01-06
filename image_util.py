@@ -94,8 +94,12 @@ def lab2rgb(lab_image):
 
 def load(path):
     """Returns image in RGB or grayscale format."""
-    image = Image.open(path)
-    return np.asarray(image)
+    if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
+        image = cv2.imread(path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        image = Image.open(path)
+    return np.array(image)
 
 
 def load_images(folder, ext):
