@@ -94,7 +94,7 @@ def lab2rgb(lab_image):
 
 def load(path):
     """Returns image in RGB or grayscale format."""
-        image = Image.open(path)
+    image = Image.open(path)
     return np.asarray(image)
 
 
@@ -331,7 +331,7 @@ def show(image, tag="UNLABELED_WINDOW"):
     cv2.resizeWindow(tag, image.shape[0:2][::-1])
     if image.shape[-1] == 3:
         image = image[..., ::-1]
-        cv2.imshow(tag, image)
+    cv2.imshow(tag, image)
     cv2.waitKey(1)
 
 
