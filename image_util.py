@@ -27,8 +27,22 @@ def adjust_gamma(image, gamma=1.0):
 
 def clahe(image):
     """Applies CLAHE equalization to input image."""
+    is_float = np.issubdtype(image.dtype, np.floating)
+    if is_float:
+        image = float_to_uint8(image)
+
+    is_rgb = image.shape[-1] == 3
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
-    return clahe.apply(image.astype(np.uint8))
+    if is_rgb:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        image[..., 0] = clahe.apply(image[..., 0])
+        image = cv2.cvtColor(image, cv2.COLOR_LAB2RGB)
+    else:
+        image = clahe.apply(image)
+
+    if is_float:
+        image = uint8_to_float(image)
+    return image
 
 
 def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
@@ -70,6 +84,14 @@ def get_center(shape):
     return [floor(x / 2) for x in shape]
 
 
+def gray2rgb(gray_image):
+    return cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
+
+
+def lab2rgb(lab_image):
+    return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
+
+
 def load(path):
     """Returns image in RGB or grayscale format."""
         image = Image.open(path)
@@ -86,10 +108,6 @@ def mask_images(images, masks):
     threshold = (masks.max() - masks.min()) / 2.0
     masked[masks <= threshold] = 0
     return masked
-
-
-def gray2rgb(gray_image):
-    return cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
 
 
 def montage(images, shape=None, mode="sequential", repeat=False, start=0):
@@ -216,6 +234,10 @@ def rescale(
 
 def rgb2gray(rgb_image):
     return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
+
+
+def rgb2lab(rgb_image):
+    return cv2.cvtColor(rgb_image, cv2.COLOR_LAB2RGB)
 
 
 def save(path, image):
