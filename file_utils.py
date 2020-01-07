@@ -6,7 +6,9 @@ def get_contents(folder, ext=None):
     optional ext argument can be used to filter the results to a single
     extension.
     """
-    return list(Path(folder).glob(create_glob(ext)))
+    contents = list(Path(folder).glob(create_glob(ext)))
+    contents.sort()
+    return contents
 
 
 def create_glob(ext=None):
