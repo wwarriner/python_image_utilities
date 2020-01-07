@@ -174,10 +174,9 @@ def montage(
     maximum_images determines the limit of images to be sampled from the stack,
     regardless of shape. Default is 36.
     """
-    if maximum_images is None:
-        image_count = images.shape[0] - start
-    else:
-        image_count = maximum_images
+    image_count = images.shape[0] - start
+    if maximum_images is not None:
+        image_count = min(maximum_images, image_count)
 
     if shape is None:
         shape = _optimize_shape(image_count)
@@ -198,7 +197,7 @@ def montage(
     else:
         iterator = chain(indices, cycle([float("inf")]))
 
-    stop = np.array(shape).prod() + start
+    stop = int(np.array(shape).prod() + start)
     iterator = islice(iterator, start, stop)
 
     montage = np.stack([_get_image_or_blank(images, i) for i in iterator])
