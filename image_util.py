@@ -111,7 +111,7 @@ def lab2rgb(lab_image):
     return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
 
 
-def load(path):
+def load(path, force_rgb=False):
     """Loads an image from the supplied path in grayscale or RGB depending on
     the source.
     """
@@ -121,6 +121,23 @@ def load(path):
     else:
         image = Image.open(path)
         image = np.array(image)
+
+    if image.ndim == 2:
+        image = image[..., np.newaxis]
+
+    # convert redundant rgb to grayscale
+    if image.shape[2] == 3:
+        g_redundant = (image[..., 0] == image[..., 1]).all()
+        b_redundant = (image[..., 0] == image[..., 2]).all()
+        if (g_redundant and b_redundant) and not force_rgb:
+            image = image[..., 0]
+            image = image[..., np.newaxis]
+
+    if image.shape[2] == 1 and force_rgb:
+        image = np.repeat(image, 3, axis=2)
+
+    assert image.ndim == 3
+    assert image.shape[2] in (1,3)
     return image
 
 
