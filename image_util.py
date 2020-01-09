@@ -308,7 +308,10 @@ def rescale(
 
     assert not isinf(lo) and not isnan(lo)
     assert not isinf(hi) and not isnan(hi)
-    assert lo < hi
+    assert lo <= hi
+
+    if lo == hi:
+        return image
 
     med = (image - lo) / (hi - lo)
     out = med * (out_range[1] - out_range[0]) + out_range[0]
