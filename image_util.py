@@ -137,7 +137,7 @@ def load(path, force_rgb=False):
         image = np.repeat(image, 3, axis=2)
 
     assert image.ndim == 3
-    assert image.shape[2] in (1,3)
+    assert image.shape[2] in (1, 3)
     return image
 
 
@@ -394,43 +394,29 @@ def rgb2lab(rgb_image):
 def save(path, image):
     """Saves an image to disk at the location specified by path.
     """
+    if np.issubdtype(image.dtype, np.floating):
+        image = float_to_uint8(image)
     if image.shape[-1] == 1:
         image = image.squeeze(axis=-1)
     im = Image.fromarray(image)
-    im.save(path)
+    im.save(str(path))
 
 
-def save_images(path, name, images, delimiter="_"):
+def save_images(paths, image_stack):
     """Saves an image stack to disk as individual images using save() with index
     appended to the supplied file name, joined by delimiter.
 
-    path is an existing folder on disk.
-    name is the desired file name.
-    images is the image stack.
+    paths is the file paths for images to be written.
+
+    images is a Numpy array whose shape is of the form (NHWC) where N is the
+    number of images, HW are spatial dimensions, and C are the channels. N may
+    be any positive number, H and W may be any positive numbers, and C must be 1
+    or 3.
     """
-
-    assert images.ndim in (3, 4)
-    if images.ndim == 3:
-        images = images[np.newaxis, ...]
-
-    ext = PurePath(name).suffix
-    base = PurePath(name).stem
-    count = images.shape[0]
-    if count <= 1:
-        digits = 0
-    else:
-        digits = ceil(log10(count - 1)) - 1
-
-    form = "{base:s}{delimiter:s}{number:0{digits}d}{ext:s}"
-    if count == 1:
-        save(str(PurePath(path) / name), images[0])
-    else:
-        for i, image in enumerate(images):
-            full_name = form.format(
-                base=base, delimiter=delimiter, number=i, digits=digits, ext=ext
-            )
-            image_path = PurePath(path) / full_name
-            save(str(image_path), image)
+    assert image_stack.ndim == 4
+    assert len(paths) == len(image_stack)
+    for path, image in zip(paths, image_stack):
+        save(path, image)
 
 
 def stack(images):
