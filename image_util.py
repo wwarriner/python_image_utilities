@@ -143,10 +143,11 @@ def load(path, force_rgb=False):
 
 def load_images(folder, ext=None):
     """Loads a folder of images. If an extension is supplied, only images with
-    that extension will be loaded.
+    that extension will be loaded. Also returns the filenames of every loaded
+    image.
     """
     image_files = file_utils.get_contents(folder, ext)
-    return [load(str(image_file)) for image_file in image_files]
+    return [load(str(image_file)) for image_file in image_files], image_files
 
 
 def mask_images(images, masks):
