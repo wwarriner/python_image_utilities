@@ -2,6 +2,7 @@ from itertools import chain, cycle, islice
 from math import ceil, floor, isinf, isnan, log10
 from pathlib import PurePath
 from random import shuffle
+from typing import List, Tuple
 
 import cv2
 import noise
@@ -141,7 +142,7 @@ def load(path, force_rgb=False):
     return image
 
 
-def load_images(folder, ext=None):
+def load_images(folder, ext=None) -> Tuple[List[np.array], List[PurePath]]:
     """Loads a folder of images. If an extension is supplied, only images with
     that extension will be loaded. Also returns the filenames of every loaded
     image.
