@@ -6,12 +6,12 @@ PathLike = Union[Path, PurePath, str]
 
 def get_contents(
     folder: PathLike, ext: Optional[PathLike] = None, recursive: bool = False
-):
+) -> List[PurePath]:
     """Returns the file contents of the supplied folder as a list of PurePath. The
     optional ext argument can be used to filter the results to a single
     extension. Can also be used recursively.
     """
-    glob = _create_glob(ext)
+    glob = _create_glob(str(ext))
     if recursive:
         glob = str(PurePath("**") / glob)
     contents = list(Path(folder).glob(glob))
@@ -79,14 +79,14 @@ def generate_file_names(
     return file_names
 
 
-def _create_glob(ext: Optional[PathLike] = None):
+def _create_glob(ext: str = None) -> str:
     if ext is None:
         return "*"
     else:
         return "*{}".format(_normalize_ext(str(ext)))
 
 
-def _normalize_ext(ext: str):
+def _normalize_ext(ext: str) -> str:
     assert ext is not None
     if ext == "":
         return ext
