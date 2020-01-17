@@ -13,14 +13,21 @@ class Test(unittest.TestCase):
         self.suba = self.sub / "a"
         self.subatxt = self.sub / "a.txt"
 
-    def test_lcp(self):
-        self.assertEqual(lcp("interspecies", "interstellar", "interstate"), "inters")
-        self.assertEqual(lcp("throne", "throne"), "throne")
-        self.assertEqual(lcp("throne", "dungeon"), "")
-        self.assertEqual(lcp("cheese"), "cheese")
-        self.assertEqual(lcp(""), "")
-        self.assertEqual(lcp("prefix", "suffix"), "")
-        self.assertEqual(lcp("foo", "foobar"), "foo")
+    def test_deduplicate(self):
+        s = deduplicate("aa", "_")
+        self.assertEqual(s, "aa")
+
+        s = deduplicate("a_a", "_")
+        self.assertEqual(s, "a_a")
+
+        s = deduplicate("a__a", "_")
+        self.assertEqual(s, "a_a")
+
+        s = deduplicate("aa_", "_")
+        self.assertEqual(s, "aa_")
+
+        s = deduplicate("aa__", "_")
+        self.assertEqual(s, "aa_")
 
     def test_get_contents(self):
         contents = get_contents(self.base_path)
@@ -70,3 +77,16 @@ class Test(unittest.TestCase):
         FOLDER = PurePath("folder")
         RESULT = [FOLDER / r for r in RESULT]
         names = generate_file_names(BASE_NAME, ".txt", indices=INDICES, folder=FOLDER)
+
+    def test_lcp(self):
+        self.assertEqual(lcp("interspecies", "interstellar", "interstate"), "inters")
+        self.assertEqual(lcp("throne", "throne"), "throne")
+        self.assertEqual(lcp("throne", "dungeon"), "")
+        self.assertEqual(lcp("cheese"), "cheese")
+        self.assertEqual(lcp(""), "")
+        self.assertEqual(lcp("prefix", "suffix"), "")
+        self.assertEqual(lcp("foo", "foobar"), "foo")
+
+
+if __name__ == "__main__":
+    unittest.main()

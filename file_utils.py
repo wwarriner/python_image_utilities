@@ -1,16 +1,27 @@
-from itertools import takewhile
+from itertools import groupby, takewhile
 from pathlib import Path, PurePath
-from typing import Any, Iterable, List, Optional, Union
+from typing import Any, Iterable, List, Optional, Sequence, Union
 
 PathLike = Union[Path, PurePath, str]
 
 
-def lcp(*s):
-    """Returns longest common prefix of input strings.
+# TODO write tests
+def append_suffix(path: PathLike, suffix: Union[str, None], delimiter: str = "_"):
+    if suffix is None:
+        return path
+    else:
+        p = PurePath(path)
+        return p.parent / (delimiter.join([p.stem, suffix]) + p.suffix)
 
-    c/o: https://rosettacode.org/wiki/Longest_common_prefix#Python:_Functional
-    """
-    return "".join(ch[0] for ch in takewhile(lambda x: min(x) == max(x), zip(*s)))
+
+def deduplicate(s: PathLike, delimiter: str):
+    out = []
+    for key, group in groupby(str(s)):
+        if key == delimiter:
+            out.append(key)
+        else:
+            out.append("".join(list(group)))
+    return "".join(out)
 
 
 def get_contents(
@@ -86,6 +97,15 @@ def generate_file_names(
     if folder is not None:
         names = [PurePath(folder) / fn for fn in names]
     return names
+
+
+def lcp(*s: PathLike):
+    """Returns longest common prefix of input strings.
+
+    c/o: https://rosettacode.org/wiki/Longest_common_prefix#Python:_Functional
+    """
+    strings = [str(x) for x in s]
+    return "".join(ch[0] for ch in takewhile(lambda x: min(x) == max(x), zip(*strings)))
 
 
 def _create_glob(ext: str = None) -> str:
