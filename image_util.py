@@ -345,6 +345,39 @@ def rescale(
     return out.astype(image.dtype)
 
 
+def resize(image, method="area", size=None, scale=1.0):
+    METHODS = {
+        "nearest": cv2.INTER_NEAREST,
+        "linear": cv2.INTER_LINEAR,
+        "area": cv2.INTER_AREA,
+        "cubic": cv2.INTER_CUBIC,
+        "lanczos": cv2.INTER_LANCZOS4,
+    }
+    assert method in METHODS
+
+    if size is None:
+        if isinstance(scale, float):
+            scale = (scale, scale)
+        assert isinstance(scale, tuple)
+        assert len(scale) == 2
+        assert isinstance(scale[0], float)
+        assert isinstance(scale[1], float)
+
+        out = cv2.resize(image, (0, 0), None, scale[0], scale[1], METHODS[method])
+    elif scale is None:
+        assert isinstance(size, tuple)
+        assert len(size) == 2
+        assert isinstance(size[0], int)
+        assert isinstance(size[1], int)
+
+        out = cv2.resize(image, size)
+    elif scale is None and size is None:
+        assert False
+    else:
+        assert False
+    return out
+
+
 def rgb2gray(rgb_image):
     """Converts an RGB image to grayscale.
     """
