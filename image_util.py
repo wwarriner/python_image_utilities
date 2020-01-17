@@ -164,7 +164,13 @@ def mask_images(images, masks):
 
 
 def montage(
-    images, shape=None, mode="sequential", repeat=False, start=0, maximum_images=36
+    images,
+    shape=None,
+    mode="sequential",
+    repeat=False,
+    start=0,
+    maximum_images=36,
+    fill_value=0,
 ):
     """Generates a montage image from an image stack.
 
@@ -217,7 +223,7 @@ def montage(
     stop = int(np.array(shape).prod() + start)
     iterator = islice(iterator, start, stop)
 
-    montage = np.stack([_get_image_or_blank(images, i) for i in iterator])
+    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in iterator])
     montage = montage.reshape((*shape, *images.shape[1:]))
 
     a, b = _deinterleave(list(range(0, montage.ndim - 1)))
@@ -473,11 +479,11 @@ def _deinterleave(c):
     return a, b
 
 
-def _get_image_or_blank(images, index):
+def _get_image_or_blank(images, index, fill_value=0):
     try:
         return images[index]
     except Exception as e:
-        return np.zeros(images.shape[1:], dtype=images.dtype)
+        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
 
 
 def _interleave(a, b):
