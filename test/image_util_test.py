@@ -33,8 +33,9 @@ class Test(unittest.TestCase):
         # ! different to check correct reshaping
         self.patch_shape = (12, 13)
 
-        self.test_image_path = PurePath("test") / "test.jpg"
-        self.tulips_image_path = PurePath("test") / "tulips.png"
+        self.base_path = PurePath("test")
+        self.test_image_path = self.base_path / "test.jpg"
+        self.tulips_image_path = self.base_path / "tulips.png"
 
     def tearDown(self):
         pass
@@ -87,6 +88,13 @@ class Test(unittest.TestCase):
         self.run_fn(self.read_gray_image(), clahe)
         self.run_fn(self.generate_image(), clahe)
         # TODO add structured assertions here
+
+    def test_load_images(self):
+        images, names = load_images(self.base_path)
+        self.assertEqual(len(images), 2)
+        self.assertEqual(len(names), 2)
+        self.assertEqual(names[0], self.test_image_path)
+        self.assertEqual(names[1], self.tulips_image_path)
 
     def test_montage(self):
         patches, _, _ = patchify(self.rgb, self.patch_shape)

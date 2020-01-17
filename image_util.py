@@ -147,7 +147,17 @@ def load_images(folder, ext=None):
     image.
     """
     image_files = file_utils.get_contents(folder, ext)
-    return [load(str(image_file)) for image_file in image_files], image_files
+    images = []
+    names = []
+    for image_file in image_files:
+        try:
+            image = load(str(image_file))
+        except Exception as e:
+            continue
+        images.append(image)
+        names.append(image_file)
+
+    return images, names
 
 
 def mask_images(images, masks):

@@ -11,7 +11,9 @@ def get_contents(
     optional ext argument can be used to filter the results to a single
     extension. Can also be used recursively.
     """
-    glob = _create_glob(str(ext))
+    if ext is not None:
+        ext = str(ext)
+    glob = _create_glob(ext)
     if recursive:
         glob = str(PurePath("**") / glob)
     contents = list(Path(folder).glob(glob))
