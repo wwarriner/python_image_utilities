@@ -1,7 +1,16 @@
+from itertools import takewhile
 from pathlib import Path, PurePath
 from typing import Any, Iterable, List, Optional, Union
 
 PathLike = Union[Path, PurePath, str]
+
+
+def lcp(*s):
+    """Returns longest common prefix of input strings.
+
+    c/o: https://rosettacode.org/wiki/Longest_common_prefix#Python:_Functional
+    """
+    return "".join(ch[0] for ch in takewhile(lambda x: min(x) == max(x), zip(*s)))
 
 
 def get_contents(
@@ -23,7 +32,7 @@ def get_contents(
 
 
 def generate_file_names(
-    base_name_parts: Iterable[Any],
+    name: Union[PathLike],
     ext: str,
     indices: Optional[Iterable[Any]] = None,
     delimiter: str = "_",
@@ -67,18 +76,16 @@ def generate_file_names(
     parts, indices (one per file name), and extension, in that order. OS-level
     validity of the resulting paths is not checked!
     """
-    base_name_parts = [str(part) for part in base_name_parts]
-    base_name = delimiter.join(base_name_parts)
     ext = str(_normalize_ext(ext))
     if indices is not None:
         indices = [str(i) for i in indices]
-        file_names = [delimiter.join([base_name, index]) + ext for index in indices]
+        names = [delimiter.join([name, index]) + ext for index in indices]
     else:
-        file_names = [base_name + ext]
-    file_names = [PurePath(f) for f in file_names]
+        names = [str(name) + ext]
+    names = [PurePath(f) for f in names]
     if folder is not None:
-        file_names = [PurePath(folder) / fn for fn in file_names]
-    return file_names
+        names = [PurePath(folder) / fn for fn in names]
+    return names
 
 
 def _create_glob(ext: str = None) -> str:

@@ -13,6 +13,15 @@ class Test(unittest.TestCase):
         self.suba = self.sub / "a"
         self.subatxt = self.sub / "a.txt"
 
+    def test_lcp(self):
+        self.assertEqual(lcp("interspecies", "interstellar", "interstate"), "inters")
+        self.assertEqual(lcp("throne", "throne"), "throne")
+        self.assertEqual(lcp("throne", "dungeon"), "")
+        self.assertEqual(lcp("cheese"), "cheese")
+        self.assertEqual(lcp(""), "")
+        self.assertEqual(lcp("prefix", "suffix"), "")
+        self.assertEqual(lcp("foo", "foobar"), "foo")
+
     def test_get_contents(self):
         contents = get_contents(self.base_path)
         self.assertEqual(len(contents), 4)
@@ -44,26 +53,20 @@ class Test(unittest.TestCase):
         self.assertEqual(contents[1], self.subatxt)
 
     def test_generate_file_names(self):
-        BASE_NAME_PARTS = ["file", 1]
+        BASE_NAME = "file_1"
         RESULT = [PurePath("file_1.txt")]
-        names = generate_file_names(BASE_NAME_PARTS, "txt")
+        names = generate_file_names(BASE_NAME, "txt")
         self.assertEqual(names, RESULT)
 
-        names = generate_file_names(BASE_NAME_PARTS, ".txt")
-        self.assertEqual(names, RESULT)
-
-        RESULT = [PurePath("file-1.txt")]
-        names = generate_file_names(BASE_NAME_PARTS, ".txt", delimiter="-")
+        names = generate_file_names(BASE_NAME, ".txt")
         self.assertEqual(names, RESULT)
 
         INDICES = list(range(1, 4))
         RESULT = ["file_1_1.txt", "file_1_2.txt", "file_1_3.txt"]
         RESULT = [PurePath(r) for r in RESULT]
-        names = generate_file_names(BASE_NAME_PARTS, ".txt", indices=INDICES)
+        names = generate_file_names(BASE_NAME, ".txt", indices=INDICES)
         self.assertEqual(names, RESULT)
 
         FOLDER = PurePath("folder")
         RESULT = [FOLDER / r for r in RESULT]
-        names = generate_file_names(
-            BASE_NAME_PARTS, ".txt", indices=INDICES, folder=FOLDER
-        )
+        names = generate_file_names(BASE_NAME, ".txt", indices=INDICES, folder=FOLDER)
