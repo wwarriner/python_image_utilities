@@ -27,7 +27,7 @@ def adjust_gamma(image, gamma=1.0):
     return out
 
 
-def clahe(image):
+def clahe(image, tile_size=(2, 2)):
     """Applies CLAHE equalization to input image. Works on both float and uint8
     images. Works on color images by converting to Lab space and treating the L
     channel as grayscale.
@@ -37,7 +37,7 @@ def clahe(image):
         image = float_to_uint8(image)
 
     is_rgb = image.shape[-1] == 3
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=tile_size)
     if is_rgb:
         image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
         image[..., 0] = clahe.apply(image[..., 0])
