@@ -43,13 +43,13 @@ def get_contents(
 
 
 def generate_file_names(
-    name: Union[PathLike],
-    ext: str,
+    name: PathLike,
+    ext: Optional[str] = None,
     indices: Optional[Iterable[Any]] = None,
     delimiter: str = "_",
     folder: Optional[PathLike] = None,
 ) -> List[PurePath]:
-    """Generates a list of file names from name parts and indices. The
+    """Generates a list of file names from a supplied name and indices. The
     name parts are joined by a delimiter into a base name. The indices are then
     joined to the base name by the delimiter forming a list of file names. The
     extension is appended with a dot. If a folder is supplied, it is prepended
@@ -87,7 +87,10 @@ def generate_file_names(
     parts, indices (one per file name), and extension, in that order. OS-level
     validity of the resulting paths is not checked!
     """
-    ext = str(_normalize_ext(ext))
+    if ext is not None:
+        ext = str(_normalize_ext(ext))
+    else:
+        ext = ""
     if indices is not None:
         indices = [str(i) for i in indices]
         names = [delimiter.join([name, index]) + ext for index in indices]
