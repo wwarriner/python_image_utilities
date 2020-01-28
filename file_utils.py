@@ -145,6 +145,9 @@ class Files:
     def __truediv__(self, sub: PathLike):
         return Files(self._root / sub, self._base, self._ext)
 
+    def mkdir(self, *args, **kwargs):
+        Path(self._root).mkdir(*args, **kwargs)
+
     def generate_file_names(self, ext: Optional[str] = None, *args, **kwargs):
         """Generates a list of file names from a supplied name and indices. See
         documentation of free function generate_file_names(). Accepts all inputs
