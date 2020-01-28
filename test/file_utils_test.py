@@ -77,6 +77,7 @@ class Test(unittest.TestCase):
         FOLDER = PurePath("folder")
         RESULT = [FOLDER / r for r in RESULT]
         names = generate_file_names(BASE_NAME, ".txt", indices=INDICES, folder=FOLDER)
+        self.assertEqual(names, RESULT)
 
     def test_lcp(self):
         self.assertEqual(lcp("interspecies", "interstellar", "interstate"), "inters")
@@ -86,6 +87,33 @@ class Test(unittest.TestCase):
         self.assertEqual(lcp(""), "")
         self.assertEqual(lcp("prefix", "suffix"), "")
         self.assertEqual(lcp("foo", "foobar"), "foo")
+
+    def test_Files(self):
+        BASE_NAME = "file_1"
+        FOLDER = "folder"
+        INDICES = list(range(1, 4))
+        RESULT = ["file_1_1.txt", "file_1_2.txt", "file_1_3.txt"]
+        RESULT = [PurePath(r) for r in RESULT]
+        RESULT = [FOLDER / r for r in RESULT]
+        files_no_ext = Files(FOLDER, BASE_NAME)
+        names = files_no_ext.generate_file_names(".txt", indices=INDICES)
+        self.assertEqual(names, RESULT)
+
+        files_ext = Files(FOLDER, BASE_NAME, "wrong")
+        names = files_ext.generate_file_names(".txt", indices=INDICES)
+        self.assertEqual(names, RESULT)
+
+        files_ext = Files("", BASE_NAME, "txt") / FOLDER
+        names = files_ext.generate_file_names(indices=INDICES)
+        self.assertEqual(names, RESULT)
+
+        files_ext_copy = files_ext.copy()
+        names_copy = files_ext_copy.generate_file_names(indices=INDICES)
+        self.assertEqual(names_copy, names)
+
+        files_ext_copy = files_ext.copy() / FOLDER
+        names_copy = files_ext_copy.generate_file_names(indices=INDICES)
+        self.assertNotEqual(names_copy, names)
 
 
 if __name__ == "__main__":

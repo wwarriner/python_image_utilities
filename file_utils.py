@@ -124,3 +124,37 @@ def _normalize_ext(ext: str) -> str:
         return ext
     else:
         return "." + ext.lstrip(".")
+
+
+class Files:
+    def __init__(
+        self, root_folder: PathLike, base_name: str, ext: Optional[str] = None
+    ):
+        self._root = PurePath(root_folder)
+        self._base = base_name
+        self._ext = ext
+
+    @property
+    def ext(self):
+        return self._ext
+
+    @ext.setter
+    def ext(self, value):
+        self._ext = _normalize_ext(value)
+
+    def __truediv__(self, sub: PathLike):
+        return Files(self._root / sub, self._base, self._ext)
+
+    def generate_file_names(self, ext: Optional[str] = None, *args, **kwargs):
+        """Generates a list of file names from a supplied name and indices. See
+        documentation of free function generate_file_names(). Accepts all inputs
+        except name and folder, which are supplied by the class.
+        """
+        if ext is None:
+            ext = self._ext
+        return generate_file_names(
+            name=self._base, folder=self._root, ext=ext, *args, **kwargs
+        )
+
+    def copy(self):
+        return Files(self._root, self._base, self._ext)
