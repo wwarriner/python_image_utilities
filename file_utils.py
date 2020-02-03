@@ -149,13 +149,15 @@ class Files:
             value = _normalize_ext(value)
         self._ext = value
 
+    def __add__(self, suffix: str):
+        f = self.copy()
+        f._base = f._delimiter.join([f._base, suffix])
+        return f
+
     def __truediv__(self, sub: PathLike):
         f = self.copy()
         f._root = f._root / sub
         return f
-
-    def add_suffixes(self, *suffix: str):
-        self._base = self._delimiter.join([self._base, *suffix])
 
     def mkdir(self, *args, **kwargs):
         Path(self._root).mkdir(*args, **kwargs)
