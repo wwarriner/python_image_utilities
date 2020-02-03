@@ -152,6 +152,9 @@ class Files:
         f._root = f._root / sub
         return f
 
+    def add_suffixes(self, *suffix: str):
+        self._base = self._delimiter.join([self._base, *suffix])
+
     def mkdir(self, *args, **kwargs):
         Path(self._root).mkdir(*args, **kwargs)
 
