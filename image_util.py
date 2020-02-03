@@ -8,6 +8,7 @@ import cv2
 import noise
 import numpy as np
 from PIL import Image
+import scipy.stats
 
 import file_utils
 
@@ -48,6 +49,39 @@ def clahe(image, tile_size=(2, 2)):
     if is_float:
         image = uint8_to_float(image)
     return image
+
+
+def consensus(image_stack, threshold="majority", tie_breaker="min"):
+    """Builds a consensus label image from a stack of label images. If input is
+    NHW, output is 1HW. Input stack must have unsigned integer type or bool
+    type. Output has the same type. If threshold is an integer, it is used as
+    the number of counts to reach consensus. If it is a float, it is used as a
+    fraction of the number of counts. If it is a string, it must be "majority",
+    and returns the class label with the largest count in that pixel. If the
+    input stack has more than 2 classes, threshold must be "majority". If there
+    is a tie or consensus is not reached, the tie-breaker strategy is used. The
+    tie-breaker strategy may be "min" or "max". Tie breaking is only relevant
+    for majority threshold.
+    """
+    assert image_stack.dtype == np.bool or np.issubdtype(image_stack.dtype, np.integer)
+    image_stack = image_stack.copy().astype(np.uint8)
+    if np.unique(image_stack).size > 2:
+        assert threshold == "majority"
+
+    if isinstance(threshold, float):
+        assert 0.0 <= threshold <= 1.0
+
+    if threshold == "majority":
+        if tie_breaker == "max":
+            image_stack = np.iinfo(image_stack.dtype).max - image_stack
+        mode = scipy.stats.mode(image_stack)[0]
+        if tie_breaker == "max":
+            mode = np.iinfo(image_stack.dtype).max - mode
+        return mode
+    else:
+        if isinstance(threshold, float):
+            threshold = round(threshold * image_stack.shape[0])
+        return image_stack.sum(axis=0) >= threshold
 
 
 def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
