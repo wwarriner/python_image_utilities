@@ -144,11 +144,13 @@ class Files:
         return self._ext
 
     @ext.setter
-    def ext(self, value):
+    def ext(self, value: str):
         self._ext = _normalize_ext(value)
 
     def __truediv__(self, sub: PathLike):
-        return Files(self._root / sub, self._base, self._ext)
+        f = self.copy()
+        f._root = f._root / sub
+        return f
 
     def mkdir(self, *args, **kwargs):
         Path(self._root).mkdir(*args, **kwargs)
