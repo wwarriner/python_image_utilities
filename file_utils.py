@@ -128,11 +128,16 @@ def _normalize_ext(ext: str) -> str:
 
 class Files:
     def __init__(
-        self, root_folder: PathLike, base_name: str, ext: Optional[str] = None
+        self,
+        root_folder: PathLike,
+        base_name: str,
+        ext: Optional[str] = None,
+        delimiter: str = "_",
     ):
         self._root = PurePath(root_folder)
         self._base = base_name
         self._ext = ext
+        self._delimiter = delimiter
 
     @property
     def ext(self):
@@ -156,8 +161,13 @@ class Files:
         if ext is None:
             ext = self._ext
         return generate_file_names(
-            name=self._base, folder=self._root, ext=ext, *args, **kwargs
+            name=self._base,
+            folder=self._root,
+            ext=ext,
+            delimiter=self._delimiter,
+            *args,
+            **kwargs
         )
 
     def copy(self):
-        return Files(self._root, self._base, self._ext)
+        return Files(self._root, self._base, self._ext, self._delimiter)
