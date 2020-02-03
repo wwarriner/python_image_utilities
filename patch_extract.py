@@ -19,7 +19,6 @@ def generate_random_image_point(image_shape, patch_shape):
     ]
 
 
-# TODO rework so the first argument is a tuple of image stacks
 def generate_random_patch(
     image, patch_shape, fov_mask=None, auxiliary_image=None, attempt_limit=100
 ):
@@ -36,10 +35,7 @@ def generate_random_patch(
         if attempts >= attempt_limit:
             return None, None
         point = generate_random_image_point(image_shape, patch_shape)
-        if (
-            fov_mask is not None
-            and not extract_patch(fov_mask, patch_shape, point).all()
-        ):
+        if fov_mask is not None and not fov_mask[point[0], point[1]]:
             attempts += 1
             continue
         patch = extract_patch(image, patch_shape, point)

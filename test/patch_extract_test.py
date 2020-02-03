@@ -18,7 +18,7 @@ class Test(unittest.TestCase):
         self.rgb_shape = self.rgb.shape
 
         self.fov_radius_ratio = 0.45
-        self.fov_offset = (-35, 35)
+        self.fov_offset = (-35, 45)
         self.fov_radius = floor(self.side_len * self.fov_radius_ratio)
 
         self.mask = generate_circular_fov_mask(
@@ -39,12 +39,12 @@ class Test(unittest.TestCase):
 
     def report_coverage(self, coverage):
         im_cover = coverage.sum() / self.mask.size
-        # print("Image coverage: {:.2%}".format(im_cover))
+        print("Image coverage: {:.2%}".format(im_cover))
         return im_cover
 
     def report_fov_coverage(self, coverage):
-        fov_cover = coverage.sum() / self.mask.sum()
-        # print("FOV coverage: {:.2%}".format(fov_cover))
+        fov_cover = (coverage & self.mask).sum() / self.mask.sum()
+        print("FOV coverage: {:.2%}".format(fov_cover))
         return fov_cover
 
     def test_generate_random_patch(self):
@@ -64,7 +64,7 @@ class Test(unittest.TestCase):
                 self.rgb, self.patch_shape, self.mask, auxiliary_image=self.mask
             )
             cover[patch[..., 0], patch[..., 1]] = True
-        coverage = self.report_fov_coverage(cover)
+        coverage = self.report_fov_coverage(cover[..., np.newaxis])
         self.assertGreaterEqual(coverage, 0.98)
 
 
