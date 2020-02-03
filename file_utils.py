@@ -144,8 +144,10 @@ class Files:
         return self._ext
 
     @ext.setter
-    def ext(self, value: str):
-        self._ext = _normalize_ext(value)
+    def ext(self, value: Optional[str]):
+        if value is not None:
+            value = _normalize_ext(value)
+        self._ext = value
 
     def __truediv__(self, sub: PathLike):
         f = self.copy()
