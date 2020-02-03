@@ -89,6 +89,74 @@ class Test(unittest.TestCase):
         self.run_fn(self.generate_image(), clahe)
         # TODO add structured assertions here
 
+    def test_consensus(self):
+        # TWO_CLASS
+        A = np.array([[1, 1], [1, 1]])
+        B = np.array([[0, 1], [1, 1]])
+        C = np.array([[0, 0], [1, 1]])
+        D = np.array([[0, 0], [0, 1]])
+        data = np.stack([A, B, C, D])
+
+        RESULT_MIN = np.array([[0, 0], [1, 1]])[np.newaxis, ...]
+        con = consensus(data, threshold="majority", tie_breaker="min")
+        self.assertTrue((con == RESULT_MIN).all())
+
+        RESULT_MAX = np.array([[0, 1], [1, 1]])[np.newaxis, ...]
+        con = consensus(data, threshold="majority", tie_breaker="max")
+        self.assertTrue((con == RESULT_MAX).all())
+
+        RESULT_ZERO = np.array([[1, 1], [1, 1]])
+        con = consensus(data, threshold=0)
+        self.assertTrue((con == RESULT_ZERO).all())
+        con = consensus(data, threshold=0.0)
+        self.assertTrue((con == RESULT_ZERO).all())
+
+        RESULT_ONE = RESULT_ZERO
+        con = consensus(data, threshold=1)
+        self.assertTrue((con == RESULT_ONE).all())
+        con = consensus(data, threshold=0.25)
+        self.assertTrue((con == RESULT_ONE).all())
+
+        RESULT_TWO = RESULT_MAX
+        con = consensus(data, threshold=2)
+        self.assertTrue((con == RESULT_TWO).all())
+        con = consensus(data, threshold=0.5)
+        self.assertTrue((con == RESULT_TWO).all())
+
+        RESULT_THREE = RESULT_MIN
+        con = consensus(data, threshold=3)
+        self.assertTrue((con == RESULT_THREE).all())
+        con = consensus(data, threshold=0.75)
+        self.assertTrue((con == RESULT_THREE).all())
+
+        RESULT_FOUR = np.array([[0, 0], [0, 1]])
+        con = consensus(data, threshold=4)
+        self.assertTrue((con == RESULT_FOUR).all())
+        con = consensus(data, threshold=1.0)
+        self.assertTrue((con == RESULT_FOUR).all())
+
+        RESULT_FIVE = np.array([[0, 0], [0, 0]])
+        con = consensus(data, threshold=5)
+        self.assertTrue((con == RESULT_FIVE).all())
+
+        # MULTI_CLASS
+        A = np.array([[1, 2], [2, 2]])
+        B = np.array([[0, 1], [2, 2]])
+        C = np.array([[0, 1], [1, 2]])
+        D = np.array([[0, 0], [1, 1]])
+        data = np.stack([A, B, C, D])
+
+        RESULT_MIN = np.array([[0, 1], [1, 2]])
+        con = consensus(data, threshold="majority", tie_breaker="min")
+        self.assertTrue((con == RESULT_MIN).all())
+
+        RESULT_MAX = np.array([[0, 1], [2, 2]])
+        con = consensus(data, threshold="majority", tie_breaker="max")
+        self.assertTrue((con == RESULT_MAX).all())
+
+        self.assertRaises(AssertionError, consensus, data, threshold=1)
+        self.assertRaises(AssertionError, consensus, data, threshold=1)
+
     def test_load_images(self):
         images, names = load_images(self.base_path)
         self.assertEqual(len(images), 2)
