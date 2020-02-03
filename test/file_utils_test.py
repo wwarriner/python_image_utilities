@@ -95,25 +95,58 @@ class Test(unittest.TestCase):
         RESULT = ["file_1_1.txt", "file_1_2.txt", "file_1_3.txt"]
         RESULT = [PurePath(r) for r in RESULT]
         RESULT = [FOLDER / r for r in RESULT]
+        RESULT_S = ["file_1_suffix_1.txt", "file_1_suffix_2.txt", "file_1_suffix_3.txt"]
+        RESULT_S = [PurePath(r) for r in RESULT_S]
+        RESULT_S = [FOLDER / r for r in RESULT_S]
+
         files_no_ext = Files(FOLDER, BASE_NAME)
         names = files_no_ext.generate_file_names(".txt", indices=INDICES)
         self.assertEqual(names, RESULT)
+
+        files_no_ext_s = Files(FOLDER, BASE_NAME) + "suffix"
+        names_s = files_no_ext_s.generate_file_names(".txt", indices=INDICES)
+        self.assertEqual(names_s, RESULT_S)
+
+        files_ext = Files(FOLDER, BASE_NAME, "wrong")
+        names = files_ext.generate_file_names(indices=INDICES)
+        for n, r in zip(names, RESULT):
+            self.assertNotEqual(n, r)
 
         files_ext = Files(FOLDER, BASE_NAME, "wrong")
         names = files_ext.generate_file_names(".txt", indices=INDICES)
         self.assertEqual(names, RESULT)
 
+        files_ext = Files(FOLDER, BASE_NAME, "wrong")
+        files_ext.ext = "txt"
+        names = files_ext.generate_file_names(indices=INDICES)
+        self.assertEqual(names, RESULT)
+
+        files_ext_s = Files(FOLDER, BASE_NAME, "wrong") + "suffix"
+        names_s = files_ext_s.generate_file_names(indices=INDICES)
+        for n, r in zip(names_s, RESULT):
+            self.assertNotEqual(n, r)
+
+        names = files_ext_s.generate_file_names(".txt", indices=INDICES)
+        self.assertEqual(names, RESULT_S)
+
         files_ext = Files("", BASE_NAME, "txt") / FOLDER
         names = files_ext.generate_file_names(indices=INDICES)
         self.assertEqual(names, RESULT)
 
+        files_ext_s = Files("", BASE_NAME, "txt") / FOLDER
+        files_ext_s = files_ext_s + "suffix"
+        names_s = files_ext_s.generate_file_names(indices=INDICES)
+        self.assertEqual(names_s, RESULT_S)
+
         files_ext_copy = files_ext.copy()
         names_copy = files_ext_copy.generate_file_names(indices=INDICES)
-        self.assertEqual(names_copy, names)
+        self.assertEqual(names_copy, RESULT)
 
-        files_ext_copy = files_ext.copy() / FOLDER
-        names_copy = files_ext_copy.generate_file_names(indices=INDICES)
-        self.assertNotEqual(names_copy, names)
+        files_ext_copy_s = files_ext.copy() + "suffix"
+        names_copy_s = files_ext_copy_s.generate_file_names(indices=INDICES)
+        self.assertEqual(names_copy_s, RESULT_S)
+        for ncs, n in zip(names_copy_s, names):
+            self.assertNotEqual(ncs, n)
 
 
 if __name__ == "__main__":
