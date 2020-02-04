@@ -99,12 +99,8 @@ class Test(unittest.TestCase):
         data = np.stack([A, B, C, D])
 
         RESULT_MIN = np.array([[0, 0], [1, 1]])[np.newaxis, ...]
-        con = consensus(data, threshold="majority", tie_breaker="min")
+        con = consensus(data, threshold="majority")
         self.assertTrue((con == RESULT_MIN).all())
-
-        RESULT_MAX = np.array([[0, 1], [1, 1]])[np.newaxis, ...]
-        con = consensus(data, threshold="majority", tie_breaker="max")
-        self.assertTrue((con == RESULT_MAX).all())
 
         RESULT_ZERO = np.array([[1, 1], [1, 1]])
         con = consensus(data, threshold=0)
@@ -118,7 +114,7 @@ class Test(unittest.TestCase):
         con = consensus(data, threshold=0.25)
         self.assertTrue((con == RESULT_ONE).all())
 
-        RESULT_TWO = RESULT_MAX
+        RESULT_TWO = np.array([[0, 1], [1, 1]])
         con = consensus(data, threshold=2)
         self.assertTrue((con == RESULT_TWO).all())
         con = consensus(data, threshold=0.5)
@@ -148,12 +144,8 @@ class Test(unittest.TestCase):
         data = np.stack([A, B, C, D])
 
         RESULT_MIN = np.array([[0, 1], [1, 2]])
-        con = consensus(data, threshold="majority", tie_breaker="min")
+        con = consensus(data, threshold="majority")
         self.assertTrue((con == RESULT_MIN).all())
-
-        RESULT_MAX = np.array([[0, 1], [2, 2]])
-        con = consensus(data, threshold="majority", tie_breaker="max")
-        self.assertTrue((con == RESULT_MAX).all())
 
         self.assertRaises(AssertionError, consensus, data, threshold=1)
         self.assertRaises(AssertionError, consensus, data, threshold=1)

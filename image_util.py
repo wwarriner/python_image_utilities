@@ -51,37 +51,44 @@ def clahe(image, tile_size=(2, 2)):
     return image
 
 
-def consensus(image_stack, threshold="majority", tie_breaker="min"):
+def consensus(image_stack, threshold="majority"):
     """Builds a consensus label image from a stack of label images. If input is
-    NHW, output is 1HW. Input stack must have unsigned integer type or bool
-    type. Output has the same type. If threshold is an integer, it is used as
-    the number of counts to reach consensus. If it is a float, it is used as a
-    fraction of the number of counts. If it is a string, it must be "majority",
-    and returns the class label with the largest count in that pixel. If the
-    input stack has more than 2 classes, threshold must be "majority". If there
-    is a tie or consensus is not reached, the tie-breaker strategy is used. The
-    tie-breaker strategy may be "min" or "max". Tie breaking is only relevant
-    for majority threshold.
+    NHW1, output is 1HW1, with the same dtype as input.
+
+    Inputs:
+
+    image_stack: A stack of images with shape NHW1 with dtype bool or integer.
+
+    threshold: If a string, must be "majority". This uses a mode for each pixel,
+    and can be computationally intensive. This threshold must be chosen if there
+    are more than two unique values in the input image_stack. Ties are assigned
+    the smallest value in that pixel. If the value is an integer, then it is
+    used as the cutoff count for the larger unique value. If the value is a
+    float, then it is treated as a proportion of values with the larger unique
+    value.
     """
     assert image_stack.dtype == np.bool or np.issubdtype(image_stack.dtype, np.integer)
     image_stack = image_stack.copy().astype(np.uint8)
-    if np.unique(image_stack).size > 2:
+    unique = np.unique(image_stack)
+    if unique.size > 2:
         assert threshold == "majority"
 
     if isinstance(threshold, float):
         assert 0.0 <= threshold <= 1.0
+    elif isinstance(threshold, int):
+        assert 0 <= threshold
 
+    out = None
     if threshold == "majority":
-        if tie_breaker == "max":
-            image_stack = np.iinfo(image_stack.dtype).max - image_stack
-        mode = scipy.stats.mode(image_stack)[0]
-        if tie_breaker == "max":
-            mode = np.iinfo(image_stack.dtype).max - mode
-        return mode
+        out = scipy.stats.mode(image_stack, axis=0, nan_policy="omit")[0]
     else:
         if isinstance(threshold, float):
             threshold = round(threshold * image_stack.shape[0])
-        return image_stack.sum(axis=0) >= threshold
+        out = image_stack.sum(axis=0) >= threshold
+        out = out.astype(image_stack.dtype)
+        out = unique[out.flatten()].reshape(out.shape)
+    assert out is not None
+    return out.astype(image_stack.dtype)
 
 
 def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
