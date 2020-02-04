@@ -32,6 +32,7 @@ class Test(unittest.TestCase):
         # ! set to be relatively prime to side_len
         # ! different to check correct reshaping
         self.patch_shape = (12, 13)
+        self.offsets = [(0, 0), (1, 0), (0, 1), (1, 1), self.patch_shape]
 
         self.base_path = PurePath("test")
         self.test_image_path = self.base_path / "test.jpg"
@@ -199,25 +200,36 @@ class Test(unittest.TestCase):
         self.show(overlay(image, noise, color, alpha=0.2, beta=0.8), "test: overlay")
 
     def test_patchify(self):
-        counts = np.array(
-            [ceil(x / y) for x, y in zip(self.rgb.shape, self.patch_shape)]
-        )
-        count = counts.prod()
-        reqd_padding = counts * np.array(self.patch_shape) - np.array(
-            self.rgb.shape[:-1]
-        )
-        patches, patch_count, padding = patchify(self.rgb, self.patch_shape)
+        for offset in self.offsets:
+            reqd_pre_padding = (
+                np.array(self.patch_shape) - np.array(offset)
+            ) % np.array(self.patch_shape)
+            reqd_post_padding = self.patch_shape - np.remainder(
+                np.array(self.rgb.shape[:-1]) + reqd_pre_padding,
+                np.array(self.patch_shape),
+            )
+            reqd_padding = list(zip(reqd_pre_padding, reqd_post_padding))
+            padded_shape = self.rgb.shape[:-1] + reqd_pre_padding + reqd_post_padding
+            counts = np.array(
+                [ceil(x / y) for x, y in zip(padded_shape, self.patch_shape)]
+            )
+            count = counts.prod()
+            patches, patch_count, padding = patchify(
+                self.rgb, self.patch_shape, offset=offset
+            )
 
-        self.assertEqual(patches.ndim, self.rgb.ndim + 1)
-        self.assertEqual(patches.shape[0], count)
-        self.assertEqual(patches.shape[1:3], self.patch_shape)
-        self.assertEqual(patches.shape[3], self.rgb.shape[2])
+            self.assertEqual(patches.ndim, self.rgb.ndim + 1)
+            self.assertEqual(patches.shape[0], count)
+            self.assertEqual(patches.shape[1:3], self.patch_shape)
+            self.assertEqual(patches.shape[3], self.rgb.shape[2])
 
-        self.assertEqual(len(patch_count), 2)
-        self.assertTrue((patch_count == counts.ravel()).all())
+            self.assertEqual(len(patch_count), 2)
+            self.assertTrue((patch_count == counts.ravel()).all())
 
-        self.assertEqual(len(padding), 2)
-        self.assertTrue((padding == reqd_padding.ravel()).all())
+            self.assertEqual(len(padding), 2)
+            all_padding = np.array([list(p) for p in padding])
+            all_reqd_padding = np.array([list(p) for p in reqd_padding])
+            self.assertTrue((all_padding == all_reqd_padding).all())
 
     def test_rescale(self):
         self.run_fn(self.read_gray_image(), self.rescale)
@@ -257,11 +269,14 @@ class Test(unittest.TestCase):
 
     def test_unpatchify(self):
         input_images = np.stack((self.rgb, self.rgb))
-        patches, patch_count, padding = patchify(input_images, self.patch_shape)
-        images = unpatchify(patches, patch_count, padding)
-        self.assertEqual(images.ndim, self.rgb.ndim + 1)
-        self.assertEqual(images.shape, input_images.shape)
-        self.assertTrue((input_images == images).all())
+        for offset in self.offsets:
+            patches, patch_count, padding = patchify(
+                input_images, self.patch_shape, offset=offset
+            )
+            images = unpatchify(patches, patch_count, padding)
+            self.assertEqual(images.ndim, self.rgb.ndim + 1)
+            self.assertEqual(images.shape, input_images.shape)
+            self.assertTrue((input_images == images).all())
 
     # TODO test_load_folder
     # TODO test_save_images

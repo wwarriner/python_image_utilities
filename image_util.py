@@ -317,7 +317,7 @@ def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=
     return out
 
 
-def patchify(images, patch_shape, *args, **kwargs):
+def patchify(image_stack, patch_shape, offset=(0, 0), *args, **kwargs):
     """Transforms an image stack into a new stack made of tiled patches from
     images of the original stack. The size of the patches is determined by
     patch_shape. If patch_shape does not evenly divide the image shape, the
@@ -331,22 +331,53 @@ def patchify(images, patch_shape, *args, **kwargs):
     Returns a tuple consisting of an image stack of patches, the number of
     patches in each dimension, and the padding used. The latter two values are
     used for unpatching.
-    """
-    assert images.ndim in (3, 4)
-    if images.ndim == 3:
-        images = images[np.newaxis, ...]
 
-    out_padding = patch_shape - np.remainder(images.shape[1:-1], patch_shape)
-    padding = np.append(out_padding, 0)
-    padding = np.insert(padding, 0, 0)
-    pre_pad = np.zeros((images.ndim), dtype=np.uint32)
-    padding = list(zip(pre_pad, padding))
-    padded = np.pad(images, padding, *args, **kwargs)
+    Inputs:
+
+    image_stack: Stack of images of shape NHW or NHWC. Assumed to have 2D
+    images.
+
+    patch_shape: Spatial shape of patches. All channel information is retained.
+    If patch shape is size M by N, then the resulting stack of patches will have
+    N * ceil(X/M) * ceil(Y/N) images. Every ceil(X/M) * ceil(Y/N) patches in the
+    stack belong to a single image. Patches are sampled along X first, then Y.
+    If M divides X and N divides Y, then a non-zero offset will change the
+    number of patches.
+
+    offset: Offset is the spatial location of the lower-right corner of the
+    top-left patch relative to the image origin. Because the patch boundaries
+    are periodic, any value greater than patch_shape in any dimension is reduced
+    module patch_shape. The value of any pixels outside the image are assigned
+    according to arguments for np.pad().
+    """
+    assert image_stack.ndim in (3, 4)
+    if image_stack.ndim == 3:
+        image_stack = image_stack[np.newaxis, ...]
+
+    assert len(patch_shape) == 2
+    assert len(offset) == 2
+
+    offset = [o % p for o, p in zip(offset, patch_shape)]
+
+    # determine pre padding
+    pre_padding = [((p - o) % p) for o, p in zip(offset, patch_shape)]
+    pre_padding = np.append(pre_padding, 0)
+    pre_padding = np.insert(pre_padding, 0, 0)
+    # compute post padding from whatever is left
+    pre_image_shape = [
+        s + pre for s, pre in zip(image_stack.shape[1:-1], pre_padding[1:-1])
+    ]
+    post_padding = patch_shape - np.remainder(pre_image_shape, patch_shape)
+    post_padding = np.append(post_padding, 0)
+    post_padding = np.insert(post_padding, 0, 0)
+    padding = list(zip(pre_padding, post_padding))
+    padded = np.pad(image_stack, padding, *args, **kwargs)
+    out_padding = padding[1:-1]
 
     patch_shape = np.array(patch_shape)
     patch_counts = np.array([x // y for x, y in zip(padded.shape[1:-1], patch_shape)])
     patches_shape = _interleave(patch_counts, patch_shape)
-    patches_shape = np.append(patches_shape, images.shape[-1])
+    patches_shape = np.append(patches_shape, image_stack.shape[-1])
     patches_shape = np.insert(patches_shape, 0, -1)
     patches = padded.reshape(patches_shape)
 
@@ -355,7 +386,7 @@ def patchify(images, patch_shape, *args, **kwargs):
     dim_order = np.insert(dim_order, 0, 0)
     patches = patches.transpose(dim_order)
 
-    stacked_shape = (-1, *patch_shape, images.shape[-1])
+    stacked_shape = (-1, *patch_shape, image_stack.shape[-1])
     patches = patches.reshape(stacked_shape)
 
     return patches, patch_counts, out_padding
@@ -497,9 +528,9 @@ def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
 
 
 def unpatchify(patches, patch_counts, padding):
-    """Inverse of patchify(). Transforms an image stack of patches back to their
-    original images. Requires the patch_counts and padding returned by
-    patchify().
+    """Inverse of patchify(). Transforms an image stack of patches produced
+    using patchify() back into an image stack of the same shape as the original
+    images. Requires the patch_count and padding returned by patchify().
     """
     chunk_len = np.array(patch_counts).prod()
     base_shape = np.array(patch_counts) * np.array(patches.shape[1:-1])
@@ -513,8 +544,15 @@ def unpatchify(patches, patch_counts, padding):
         chunk = np.transpose(chunk, (0, 2, 1, 3, 4))
         images.append(np.reshape(chunk, image_shape))
     images = np.stack(images)
-    space_shape = base_shape - padding
-    slices = [slice(0, x) for x in space_shape]
+    padding = list(zip(*padding))
+    pre_padding = padding[0]
+    post_padding = padding[1]
+    space_shape = [
+        base - pre - post
+        for base, pre, post in zip(base_shape, pre_padding, post_padding)
+    ]
+    # space_shape = base_shape - padding
+    slices = [slice(pre, pre + x) for pre, x in zip(pre_padding, space_shape)]
     slices.append(slice(None))
     slices.insert(0, slice(None))
     images = images[tuple(slices)]
