@@ -2,6 +2,8 @@ from itertools import groupby, takewhile
 from pathlib import Path, PurePath
 from typing import Any, Iterable, List, Optional, Sequence, Union
 
+from suffix_trees.STree import STree
+
 PathLike = Union[Path, PurePath, str]
 
 
