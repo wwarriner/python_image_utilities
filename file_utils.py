@@ -111,6 +111,13 @@ def lcp(*s: PathLike):
     return "".join(ch[0] for ch in takewhile(lambda x: min(x) == max(x), zip(*strings)))
 
 
+def lcs(*s: PathLike):
+    """Returns longest common substring of input strings.
+    """
+    strings = [str(x) for x in s]
+    return STree(strings).lcs()
+
+
 def _create_glob(ext: str = None) -> str:
     if ext is None:
         return "*"

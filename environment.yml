@@ -8,3 +8,4 @@ dependencies:
   - python
   - pip:
       - opencv-python
+      - suffix-trees

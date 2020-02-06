@@ -88,6 +88,15 @@ class Test(unittest.TestCase):
         self.assertEqual(lcp("prefix", "suffix"), "")
         self.assertEqual(lcp("foo", "foobar"), "foo")
 
+    def test_lcs(self):
+        STRINGS = [
+            "x!983_abcdefghij0983q580",
+            "abcdefghijklmnopqrstuvwxyz",
+            "_abcdefghij",
+        ]
+        RESULT = "abcdefghij"
+        self.assertEqual(lcs(*STRINGS), RESULT)
+
     def test_Files(self):
         BASE_NAME = "file_1"
         FOLDER = "folder"
