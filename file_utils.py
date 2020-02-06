@@ -9,6 +9,8 @@ PathLike = Union[Path, PurePath, str]
 
 # TODO write tests
 def append_suffix(path: PathLike, suffix: Union[str, None], delimiter: str = "_"):
+    """Joins suffix to the end of path using delimiter.
+    """
     if suffix is None:
         return path
     else:
@@ -16,14 +18,52 @@ def append_suffix(path: PathLike, suffix: Union[str, None], delimiter: str = "_"
         return p.parent / (delimiter.join([p.stem, suffix]) + p.suffix)
 
 
-def deduplicate(s: PathLike, delimiter: str):
+def deduplicate(s: PathLike, delimiter: str) -> PathLike:
+    """Removed consecutive duplicates of a delimiter.
+    """
+    T = type(s)
     out = []
     for key, group in groupby(str(s)):
         if key == delimiter:
             out.append(key)
         else:
             out.append("".join(list(group)))
-    return "".join(out)
+    return T("".join(out))
+
+
+def fix_delimiters(
+    s: PathLike,
+    out_delimiter: str = "_",
+    recognized_delimiters: Sequence[str] = ["_", "-", " "],
+    do_deduplicate: bool = True,
+) -> PathLike:
+    """Changes all recognized delimiters to a uniform delimiter, and optionally
+    removes duplicates. Deduplication is performed by default. It is not best
+    practice to modify file separators using this function. Please use the
+    built-in pathlib library.
+
+    Inputs:
+
+    s: PathLike objects with delimiters to replace.
+
+    out_delimiter: The delimiter desired in the output.
+
+    recognized_delimiters: A sequence of delimiters to replace by out_delimiter.
+
+    deduplicate: A bool indicating whether deduplication should be performed.
+
+    Returns:
+
+    A PathLike object of the same type as s with all matching
+    recognized_delimiters replaced by out_delimiter.
+    """
+    T = type(s)
+    s = str(s)
+    for d in recognized_delimiters:
+        s = s.replace(d, out_delimiter)
+    if do_deduplicate:
+        s = deduplicate(s, delimiter=out_delimiter)
+    return T(s)
 
 
 def get_contents(
@@ -104,6 +144,13 @@ def generate_file_names(
     return names
 
 
+def get_subfolders(folder: PathLike) -> List[PurePath]:
+    subfolders = Path(folder).glob("./*")
+    subfolders = [PurePath(f) for f in subfolders if f.is_dir()]
+    subfolders.sort()
+    return subfolders
+
+
 def lcp(*s: PathLike):
     """Returns longest common prefix of input strings.
 
@@ -136,17 +183,41 @@ def _normalize_ext(ext: str) -> str:
 
 
 class Files:
+    """A class abstraction for the concept of files on a filesystem. Not
+    intended to be comprehensive, but intended to be used for preparing file
+    paths for bulk file writing.
+
+    Inputs:
+
+    root_folder: The root folder containing the files.
+
+    base_name: The base name of the files to be written. Roughly equivalent to
+    """
+
     def __init__(
         self,
         root_folder: PathLike,
         base_name: str,
         ext: Optional[str] = None,
         delimiter: str = "_",
+        allowed_delimiters: Sequence[str] = ["_", "-", " "],
     ):
         self._root = PurePath(root_folder)
         self._base = base_name
         self._ext = ext
         self._delimiter = delimiter
+        self._allowed_delimiters = allowed_delimiters
+        self._fix_delimiters()
+
+    @property
+    def delimiter(self):
+        return self._delimiter
+
+    @delimiter.setter
+    def delimiter(self, value: str):
+        assert value in self._allowed_delimiters
+        self._delimiter = value
+        self._fix_delimiters()
 
     @property
     def ext(self):
@@ -158,18 +229,49 @@ class Files:
             value = _normalize_ext(value)
         self._ext = value
 
+    @property
+    def name(self):
+        return self._base
+
+    @name.setter
+    def name(self, value: str):
+        self._base = value
+        self._fix_delimiters()
+
+    @property
+    def parent(self):
+        f = self._copy()
+        f._root = f._root.parent
+        return f
+
+    @property
+    def root(self):
+        return self._root
+
     def __add__(self, suffix: str):
-        f = self.copy()
+        """Appends a suffix to the base name, joined with delimiter.
+        """
+        f = self._copy()
         f._base = f._delimiter.join([f._base, suffix])
         return f
 
     def __truediv__(self, sub: PathLike):
-        f = self.copy()
+        """Appends a directory to the root folder.
+        """
+        f = self._copy()
         f._root = f._root / sub
         return f
 
     def mkdir(self, *args, **kwargs):
+        """Creates the current root dir. See Path.mkdir() for arguments.
+        """
         Path(self._root).mkdir(*args, **kwargs)
+
+    def get_subfolders(self):
+        """Returns a list of PurePath of the folders contained in the root
+        folder.
+        """
+        return get_subfolders(self._root)
 
     def generate_file_names(self, ext: Optional[str] = None, *args, **kwargs):
         """Generates a list of file names from a supplied name and indices. See
@@ -187,5 +289,14 @@ class Files:
             **kwargs
         )
 
-    def copy(self):
+    def _copy(self):
         return Files(self._root, self._base, self._ext, self._delimiter)
+
+    def _fix_delimiters(self):
+        self._base = str(
+            fix_delimiters(
+                self._base,
+                out_delimiter=self._delimiter,
+                recognized_delimiters=self._allowed_delimiters,
+            )
+        )

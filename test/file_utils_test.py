@@ -29,6 +29,23 @@ class Test(unittest.TestCase):
         s = deduplicate("aa__", "_")
         self.assertEqual(s, "aa_")
 
+    def test_fix_delimiters(self):
+        RECOGNIZED = ["_", "-"]
+        OUT = "_"
+        STRING = "a_b-c__d_-e-_f--g"
+        RESULT_DUPE = "a_b_c__d__e__f__g"
+        s = fix_delimiters(
+            STRING,
+            out_delimiter=OUT,
+            recognized_delimiters=RECOGNIZED,
+            do_deduplicate=False,
+        )
+        self.assertEqual(s, RESULT_DUPE)
+
+        RESULT = "a_b_c_d_e_f_g"
+        s = fix_delimiters(STRING, out_delimiter=OUT, recognized_delimiters=RECOGNIZED)
+        self.assertEqual(s, RESULT)
+
     def test_get_contents(self):
         contents = get_contents(self.base_path)
         self.assertEqual(len(contents), 4)
@@ -79,6 +96,11 @@ class Test(unittest.TestCase):
         names = generate_file_names(BASE_NAME, ".txt", indices=INDICES, folder=FOLDER)
         self.assertEqual(names, RESULT)
 
+    def test_get_subfolders(self):
+        subs = get_subfolders(self.base_path)
+        self.assertEqual(len(subs), 1)
+        self.assertEqual(subs[0], self.sub)
+
     def test_lcp(self):
         self.assertEqual(lcp("interspecies", "interstellar", "interstate"), "inters")
         self.assertEqual(lcp("throne", "throne"), "throne")
@@ -99,6 +121,7 @@ class Test(unittest.TestCase):
 
     def test_Files(self):
         BASE_NAME = "file_1"
+        ALT_BASE_NAME = "file-1"
         FOLDER = "folder"
         INDICES = list(range(1, 4))
         RESULT = ["file_1_1.txt", "file_1_2.txt", "file_1_3.txt"]
@@ -107,6 +130,37 @@ class Test(unittest.TestCase):
         RESULT_S = ["file_1_suffix_1.txt", "file_1_suffix_2.txt", "file_1_suffix_3.txt"]
         RESULT_S = [PurePath(r) for r in RESULT_S]
         RESULT_S = [FOLDER / r for r in RESULT_S]
+
+        files = Files(FOLDER, BASE_NAME)
+        files_idem = (Files(FOLDER, BASE_NAME) / FOLDER).parent
+        self.assertEqual(files.root, files_idem.root)
+
+        files = Files(FOLDER, BASE_NAME)
+        self.assertEqual(files.name, BASE_NAME)
+
+        files = Files(FOLDER, BASE_NAME) + BASE_NAME
+        self.assertEqual(files.name, files.delimiter.join([BASE_NAME, BASE_NAME]))
+        files.name = BASE_NAME
+        self.assertEqual(files.name, BASE_NAME)
+
+        files = Files(FOLDER, BASE_NAME) + BASE_NAME
+        files.delimiter = "-"
+        self.assertEqual(files.delimiter, "-")
+        self.assertEqual(
+            files.name, files.delimiter.join([ALT_BASE_NAME, ALT_BASE_NAME])
+        )
+        files.name = ALT_BASE_NAME
+        self.assertEqual(files.name, ALT_BASE_NAME)
+
+        files = Files(FOLDER, BASE_NAME)
+        with self.assertRaises(AssertionError):
+            files.delimiter = "x"
+
+        files = Files(FOLDER, BASE_NAME, allowed_delimiters=["x"])
+        try:
+            files.delimiter = "x"
+        except AssertionError:
+            self.fail()
 
         files_no_ext = Files(FOLDER, BASE_NAME)
         names = files_no_ext.generate_file_names(".txt", indices=INDICES)
@@ -147,15 +201,19 @@ class Test(unittest.TestCase):
         names_s = files_ext_s.generate_file_names(indices=INDICES)
         self.assertEqual(names_s, RESULT_S)
 
-        files_ext_copy = files_ext.copy()
-        names_copy = files_ext_copy.generate_file_names(indices=INDICES)
-        self.assertEqual(names_copy, RESULT)
+        files = Files(FOLDER, BASE_NAME)
+        files_copy = files / FOLDER
+        names = files.generate_file_names(indices=INDICES)
+        names_copy = files_copy.generate_file_names(indices=INDICES)
+        for n, nc in zip(names, names_copy):
+            self.assertNotEqual(n, nc)
 
-        files_ext_copy_s = files_ext.copy() + "suffix"
-        names_copy_s = files_ext_copy_s.generate_file_names(indices=INDICES)
-        self.assertEqual(names_copy_s, RESULT_S)
-        for ncs, n in zip(names_copy_s, names):
-            self.assertNotEqual(ncs, n)
+        files = Files(FOLDER, BASE_NAME)
+        files_copy = files + BASE_NAME
+        names = files.generate_file_names(indices=INDICES)
+        names_copy = files_copy.generate_file_names(indices=INDICES)
+        for n, nc in zip(names, names_copy):
+            self.assertNotEqual(n, nc)
 
 
 if __name__ == "__main__":
