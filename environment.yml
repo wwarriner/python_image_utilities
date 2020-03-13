@@ -6,6 +6,6 @@ dependencies:
   - numpy
   - pillow
   - python
+  - pip
   - pip:
       - opencv-python
-      - suffix-trees
