@@ -1,17 +1,20 @@
 from itertools import chain, cycle, islice
 from math import ceil, floor, isinf, isnan, log10
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from random import shuffle
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import cv2
 import noise
 import numpy as np
-from PIL import Image
 import scipy.stats
+from PIL import Image
 
 # remove . when testing
 from .inc.file_utils.file_utils import get_contents
+
+
+PathLike = Union[str, Path, PurePath]
 
 
 def adjust_gamma(image, gamma=1.0):
@@ -154,15 +157,15 @@ def lab2rgb(lab_image):
     return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
 
 
-def load(path, force_rgb=False):
+def load(path: PathLike, force_rgb=False):
     """Loads an image from the supplied path in grayscale or RGB depending on
     the source.
     """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
-        image = cv2.imread(path)
+        image = cv2.imread(str(path))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     else:
-        image = Image.open(path)
+        image = Image.open(str(path))
         image = np.array(image)
 
     if image.ndim == 2:
@@ -475,7 +478,7 @@ def rgb2lab(rgb_image):
     return cv2.cvtColor(rgb_image, cv2.COLOR_LAB2RGB)
 
 
-def save(path, image):
+def save(path: PathLike, image):
     """Saves an image to disk at the location specified by path.
     """
     image = image.copy()
