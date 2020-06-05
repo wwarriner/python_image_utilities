@@ -254,6 +254,10 @@ def montage(
     maximum_images determines the limit of images to be sampled from the stack,
     regardless of shape. Default is 36.
     """
+    if images.ndim == 3:
+        images = images[..., np.newaxis]
+    assert images.ndim == 4
+
     image_count = images.shape[0] - start
     if maximum_images is not None:
         image_count = min(maximum_images, image_count)
