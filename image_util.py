@@ -1,14 +1,15 @@
 from itertools import chain, cycle, islice
-from math import ceil, floor, isinf, isnan, log10
+from math import floor, isinf, isnan
 from pathlib import Path, PurePath
 from random import shuffle
 from typing import List, Tuple, Union
 
+from PIL import Image
 import cv2
 import noise
 import numpy as np
 import scipy.stats
-from PIL import Image
+import tifffile.tifffile as tf
 
 # remove . when testing
 from .inc.file_utils.file_utils import get_contents
