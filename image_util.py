@@ -162,8 +162,7 @@ def load(path: PathLike, force_rgb=False):
     the source.
     """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
-        image = cv2.imread(str(path))
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = tf.imread(path)
     else:
         image = Image.open(str(path))
         image = np.array(image)
@@ -490,8 +489,11 @@ def save(path: PathLike, image):
         image = float_to_uint8(image)
     if image.shape[-1] == 1:
         image = image.squeeze(axis=-1)
-    im = Image.fromarray(image)
-    im.save(str(path))
+    if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
+        image = tf.imwrite(path, data=image)
+    else:
+        im = Image.fromarray(image)
+        im.save(str(path))
 
 
 def save_images(paths, image_stack):
