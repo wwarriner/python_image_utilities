@@ -14,6 +14,23 @@ import tifffile.tifffile as tf
 # remove . when testing
 from .inc.file_utils.file_utils import get_contents
 
+# TODO
+# 1) clean up public/private info
+# 2) clean up distinction between to_dtype() and rescale()
+# 3) automate test-cases (no visuals, just check against values from private
+#    data folder, use small, highly-compressed files)
+# 4) update environment from environment.yml
+# 5) add more test-cases to get better coverage
+
+# to_dtype() should do what rescale() does now. it should transform dtypes while
+# keeping each pixels dtype-range-ratio the same (within rounding)
+
+# rescale() should rescale the extant data range to whatever out_range is
+# desired, optionally to a new dtype if NO out_range is provided, use the full
+# out_range if NO dtype is provided, keep the same dtype
+
+# identify and factor out ANY common functionality
+
 
 PathLike = Union[str, Path, PurePath]
 
@@ -51,7 +68,8 @@ def to_dtype(image, dtype, negative_in=False, negative_out=False):
 
 
 def adjust_gamma(image, gamma=1.0):
-    """Adjusts image gamma. Works on both float and uint8 images. Float images
+    """
+    Adjusts image gamma. Works on both float and uint8 images. Float images
     should be in the range (0.0, 1.0) for expected behavior.
     """
     igamma = 1.0 / gamma
@@ -66,9 +84,11 @@ def adjust_gamma(image, gamma=1.0):
 
 
 def clahe(image, tile_size=(2, 2)):
-    """Applies CLAHE equalization to input image. Works on both float and uint8
+    """
+    Applies CLAHE equalization to input image. Works on both float and uint8
     images. Works on color images by converting to Lab space and treating the L
-    channel as grayscale.
+    channel as grayscale. Note that the underlying image type used is int32
+    which may create a narrowing conversion. Returns the same dtype as input.
     """
     dtype = None
     is_float = np.issubdtype(image.dtype, np.floating)
@@ -93,7 +113,8 @@ def clahe(image, tile_size=(2, 2)):
 
 
 def consensus(image_stack, threshold="majority"):
-    """Builds a consensus label image from a stack of label images. If input is
+    """
+    Builds a consensus label image from a stack of label images. If input is
     NHW1, output is 1HW1, with the same dtype as input.
 
     Inputs:
@@ -133,7 +154,8 @@ def consensus(image_stack, threshold="majority"):
 
 
 def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
-    """Generates a circular field of view mask, with the interior of the circle
+    """
+    Generates a circular field of view mask, with the interior of the circle
     included. The circle is assumed to be centered on the image shape.
     """
     center = get_center(shape)
@@ -145,7 +167,8 @@ def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
 
 
 def generate_noise(shape, offsets=None):
-    """Generates a grayscale image with single-octave Perlin noise. Useful for
+    """
+    Generates a grayscale image with single-octave Perlin noise. Useful for
     testing.
     """
     if offsets is None:
@@ -165,14 +188,16 @@ def generate_noise(shape, offsets=None):
 
 
 def get_center(shape):
-    """Returns the coordinates of the center point of an image in pixels,
-    rounded down.
+    """
+    Returns the coordinates of the center point of an image in pixels, rounded
+    down.
     """
     return [floor(x / 2) for x in shape]
 
 
 def gray2rgb(gray_image):
-    """Converts a grayscale image to an RGB image.
+    """
+    Converts a grayscale image to an RGB image.
     """
     if gray_image.shape[-1] == 1:
         gray_image = gray_image.squeeze(-1)
@@ -180,14 +205,16 @@ def gray2rgb(gray_image):
 
 
 def lab2rgb(lab_image):
-    """Converts an Lab image to an RGB image.
+    """
+    Converts an Lab image to an RGB image.
     """
     return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
 
 
 def load(path: PathLike, force_rgb=False):
-    """Loads an image from the supplied path in grayscale or RGB depending on
-    the source.
+    """
+    Loads an image from the supplied path in grayscale or RGB depending on the
+    source.
     """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
         image = tf.imread(path)
@@ -215,9 +242,9 @@ def load(path: PathLike, force_rgb=False):
 
 
 def load_images(folder, ext=None) -> Tuple[List[np.array], List[PurePath]]:
-    """Loads a folder of images. If an extension is supplied, only images with
-    that extension will be loaded. Also returns the filenames of every loaded
-    image.
+    """
+    Loads a folder of images. If an extension is supplied, only images with that
+    extension will be loaded. Also returns the filenames of every loaded image.
     """
     image_files = get_contents(folder, ext)
     images = []
@@ -234,8 +261,9 @@ def load_images(folder, ext=None) -> Tuple[List[np.array], List[PurePath]]:
 
 
 def mask_images(images, masks):
-    """Masks out pixels in an image stack based on the masks. There must be
-    either one mask, or the same number of images and masks.
+    """
+    Masks out pixels in an image stack based on the masks. There must be either
+    one mask, or the same number of images and masks.
     """
     if masks.shape[0] == 1:
         masks = np.repeat(masks, images.shape[0], axis=0)
@@ -256,7 +284,8 @@ def montage(
     maximum_images=36,
     fill_value=0,
 ):
-    """Generates a montage image from an image stack.
+    """
+    Generates a montage image from an image stack.
 
     shape determines the number of images to tile in each dimension. Must be an
     iterable of length 2 containing positive integers, or a single positive
@@ -325,15 +354,19 @@ def montage(
 
 
 # TODO fix issue with different channel counts, i.e. gray to rgb for both inputs
-def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=False):
-    """Applies a color to the supplied grayscale foreground and then blends it
-    with the background using mixing ratio parameters alpha and beta. Background
-    may be RGB or grayscale. Foreground and background may both be either float
-    or uint8. Output is RGB with the same dtype as background. Gamma is a
-    constant ratio parameter to add to all pixels.
+def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0):
+    """
+    Applies a color to the supplied grayscale foreground and then blends it with
+    the background using mixing ratio parameters alpha and beta. Background may
+    be RGB or grayscale. Foreground and background may both be either float or
+    uint*. Output is RGB with the same dtype as background. Gamma is a constant
+    ratio parameter to add to all pixels.
 
     Note that if the sum of alpha, beta and gamma is greater than 1.0, clipping
     can occur.
+
+    Note that underlying computation is performed on int32, which may create a
+    narrowing conversion. Returned dtype is same as background.
     """
     assert np.issubdtype(background.dtype, np.floating) or background.dtype == np.uint8
     assert background.shape[-1] in (1, 3)
@@ -358,10 +391,11 @@ def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=
 
 
 def patchify(image_stack, patch_shape, offset=(0, 0), *args, **kwargs):
-    """Transforms an image stack into a new stack made of tiled patches from
-    images of the original stack. The size of the patches is determined by
-    patch_shape. If patch_shape does not evenly divide the image shape, the
-    excess is padded with zeros, i.e. black.
+    """
+    Transforms an image stack into a new stack made of tiled patches from images
+    of the original stack. The size of the patches is determined by patch_shape.
+    If patch_shape does not evenly divide the image shape, the excess is padded
+    with zeros, i.e. black.
 
     If there are N images of size X by Y, and patches of size M by N are
     requested, then the resulting stack will have N * ceil(X/M) * ceil(Y/N)
@@ -451,7 +485,8 @@ def rescale(
     2) If *_range is a tuple with at least one None, (-/+)inf, or NaN, the dtype
        range min or max is used for 1st and 2nd tuple position, respectively.
     3) If use_data is True, the min/max of the available data is used instead of
-       the min/max of the dtype for in_range. out_range is unaffected by use_data.
+       the min/max of the dtype for in_range. out_range is unaffected by
+       use_data.
 
     Ranges of dtypes are full width for integral types and [0.0, 1.0] for
     floating types.
@@ -552,19 +587,22 @@ def resize(image, method="area", size=None, scale=1.0):
 
 
 def rgb2gray(rgb_image):
-    """Converts an RGB image to grayscale.
+    """
+    Converts an RGB image to grayscale.
     """
     return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 
 
 def rgb2lab(rgb_image):
-    """Converts an RGB image to Lab.
+    """
+    Converts an RGB image to Lab.
     """
     return cv2.cvtColor(rgb_image, cv2.COLOR_LAB2RGB)
 
 
-def save(path: PathLike, image):
-    """Saves an image to disk at the location specified by path.
+def save(path: PathLike, image, dtype=None):
+    """
+    Saves an image to disk at the location specified by path.
     """
     image = image.copy()
     if dtype is not None:
@@ -579,15 +617,16 @@ def save(path: PathLike, image):
 
 
 def save_images(paths, image_stack):
-    """Saves an image stack to disk as individual images using save() with index
+    """
+    Saves an image stack to disk as individual images using save() with index
     appended to the supplied file name, joined by delimiter.
 
     paths is the file paths for images to be written.
 
     images is a Numpy array whose shape is of the form (NHWC) where N is the
-    number of images, HW are spatial dimensions, and C are the channels. N may
-    be any positive number, H and W may be any positive numbers, and C must be 1
-    or 3.
+     number of images, HW are spatial dimensions, and C are the channels. N may
+     be any positive number, H and W may be any positive numbers, and C must be
+     1 or 3.
     """
     assert image_stack.ndim == 4
     assert len(paths) == len(image_stack)
@@ -596,8 +635,9 @@ def save_images(paths, image_stack):
 
 
 def stack(images):
-    """Converts a single image or an iterable of images to an image stack. An
-    image stack is a numpy array whose first dimension is the image index.
+    """
+    Converts a single image or an iterable of images to an image stack. An image
+    stack is a numpy array whose first dimension is the image index.
     """
     if type(images) is np.ndarray:
         images = (images,)
@@ -606,7 +646,8 @@ def stack(images):
 
 
 def standardize(images):
-    """Standardizes an (N+1)-D block of N-D images by the usual method, i.e.
+    """
+    Standardizes an (N+1)-D block of N-D images by the usual method, i.e.
     (x-u)/s.
 
     This function is intended to be used just before application of a machine
@@ -620,8 +661,9 @@ def standardize(images):
 
 
 def unpatchify(patches, patch_counts, padding):
-    """Inverse of patchify(). Transforms an image stack of patches produced
-    using patchify() back into an image stack of the same shape as the original
+    """
+    Inverse of patchify(). Transforms an image stack of patches produced using
+    patchify() back into an image stack of the same shape as the original
     images. Requires the patch_count and padding returned by patchify().
     """
     chunk_len = np.array(patch_counts).prod()
@@ -652,7 +694,8 @@ def unpatchify(patches, patch_counts, padding):
 
 
 def show(image, tag="UNLABELED_WINDOW"):
-    """Displays an image in a new window labeled with tag.
+    """
+    Displays an image in a new window labeled with tag.
     """
     assert image.ndim in (2, 3)
     if image.ndim == 3:
@@ -667,7 +710,9 @@ def show(image, tag="UNLABELED_WINDOW"):
 
 
 def _deinterleave(c):
-    """Separates two interleaved sequences into a tuple of two sequences of the same type.
+    """
+    Separates two interleaved sequences into a tuple of two sequences of the
+    same type.
     """
     a = c[0::2]
     b = c[1::2]
@@ -682,7 +727,8 @@ def _get_image_or_blank(images, index, fill_value=0):
 
 
 def _interleave(a, b):
-    """Interleaves two sequences of the same type into a single sequence.
+    """
+    Interleaves two sequences of the same type into a single sequence.
     """
     c = np.empty((a.size + b.size), dtype=a.dtype)
     c[0::2] = a
@@ -691,7 +737,8 @@ def _interleave(a, b):
 
 
 def _optimize_shape(count, width_height_aspect_ratio=1.0):
-    """Computes the optimal X by Y shape of count objects given a desired
+    """
+    Computes the optimal X by Y shape of count objects given a desired
     width-to-height aspect ratio.
     """
     N = count
