@@ -18,6 +18,38 @@ from .inc.file_utils.file_utils import get_contents
 PathLike = Union[str, Path, PurePath]
 
 
+def get_dtype_range(dtype, allow_negative=False):
+    if np.issubdtype(dtype, np.integer):
+        ii = np.iinfo(dtype)
+        if not allow_negative and np.issubdtype(dtype, np.signedinteger):
+            value = (0, ii.max)
+        else:
+            value = (ii.min, ii.max)
+    elif np.issubdtype(dtype, np.floating):
+        value = (0.0, 1.0)
+    else:
+        raise TypeError("supplied dtype is unsupported: {:s}".format(str(dtype)))
+    return value
+
+
+def to_dtype(image, dtype, negative_in=False, negative_out=False):
+    """
+    Converts image to desired dtype by scaling values into supported range.
+
+    If allow_negative is false, only the positive range of signed integer types
+    are used. If true, the full range is used. Default is false.
+
+    Allowed dtypes include any np.integer or np.floating.
+
+    IMPORTANT: For single-channel images, most file formats only support
+    unsigned integer types. TIFF allow signed integer types. For multi-channel
+    images, most file formats only uint8 images.
+    """
+    in_range = get_dtype_range(image.dtype, allow_negative=negative_in)
+    out_range = get_dtype_range(dtype, allow_negative=negative_out)
+    return rescale(image, out_range=out_range, in_range=in_range, dtype=dtype)
+
+
 def adjust_gamma(image, gamma=1.0):
     """Adjusts image gamma. Works on both float and uint8 images. Float images
     should be in the range (0.0, 1.0) for expected behavior.
@@ -38,9 +70,11 @@ def clahe(image, tile_size=(2, 2)):
     images. Works on color images by converting to Lab space and treating the L
     channel as grayscale.
     """
+    dtype = None
     is_float = np.issubdtype(image.dtype, np.floating)
     if is_float:
-        image = float_to_uint8(image)
+        dtype = image.dtype
+        image = to_dtype(image, dtype=np.int32)
 
     is_rgb = image.shape[-1] == 3
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=tile_size)
@@ -52,7 +86,9 @@ def clahe(image, tile_size=(2, 2)):
         image = clahe.apply(image)
 
     if is_float:
-        image = uint8_to_float(image)
+        assert dtype is not None
+        image = to_dtype(image, dtype=dtype)
+
     return image
 
 
@@ -94,15 +130,6 @@ def consensus(image_stack, threshold="majority"):
         out = unique[out.flatten()].reshape(out.shape)
     assert out is not None
     return out.astype(image_stack.dtype)
-
-
-def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
-    """Converts a float image to a uint8 image. Image is rescaled with input
-    range equal to float_range. If clip is set to True, values are clipped
-    following conversion.
-    """
-    uint8_image = rescale(float_image, out_range=(0.0, 255.0), in_range=float_range)
-    return uint8_image.astype(np.uint8)
 
 
 def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
@@ -314,21 +341,19 @@ def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=
     assert foreground.shape[-1] == 1
     assert len(color) == 3
 
-    if background.dtype == np.uint8:
-        background = uint8_to_float(background)
+    out_dtype = background.dtype
+    background = to_dtype(background, dtype=np.int32)
     if background.shape[-1] == 1:
         background = gray2rgb(background)
 
-    if foreground.dtype == np.uint8:
-        foreground = uint8_to_float(foreground)
+    foreground = to_dtype(foreground, dtype=np.int32)
     foreground = gray2rgb(foreground)
 
     color = np.array(color)
     color = color[np.newaxis][np.newaxis]
     foreground = foreground * color
     out = cv2.addWeighted(foreground, alpha, background, beta, gamma)
-    if background.dtype == np.uint8:
-        out = float_to_uint8(out, clip=clip)
+    out = to_dtype(out, dtype=out_dtype)
     return out
 
 
@@ -408,33 +433,89 @@ def patchify(image_stack, patch_shape, offset=(0, 0), *args, **kwargs):
 
 
 def rescale(
-    image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf")), clip=False
+    image,
+    out_range=None,
+    in_range=None,
+    use_data=False,
+    clip=False,
+    dtype=None,
+    negative_in=False,
+    negative_out=False,
 ):
-    """Rescales image from in_range to out_range while retaining input dtype. If
-    clip is set to True, the resulting image values are clipped to out_range.
     """
-    lo = in_range[0]
-    if lo == float("-inf") or isnan(lo):
-        lo = np.min(image)
+    Rescales image from in_range to out_range while retaining input dtype. If
+    clip is set to True, the resulting image values are clipped to out_range. If
+    dtype is supplied, output image dtype is supplied type.
 
-    hi = in_range[1]
-    if hi == float("+inf") or isnan(hi):
-        hi = np.max(image)
+    1) If *_range is None the full dtype range is used.
+    2) If *_range is a tuple with at least one None, (-/+)inf, or NaN, the dtype
+       range min or max is used for 1st and 2nd tuple position, respectively.
+    3) If use_data is True, the min/max of the available data is used instead of
+       the min/max of the dtype for in_range. out_range is unaffected by use_data.
 
-    assert not isinf(lo) and not isnan(lo)
-    assert not isinf(hi) and not isnan(hi)
-    assert lo <= hi
+    Ranges of dtypes are full width for integral types and [0.0, 1.0] for
+    floating types.
 
-    if lo == hi:
-        return image
+    If either range has zero width no change is made.
 
-    med = (image - lo) / (hi - lo)
-    out = med * (out_range[1] - out_range[0]) + out_range[0]
-    if np.issubdtype(image.dtype, np.integer):
-        out = np.round(out)
+    Default behavior is scaling the values from the full dtype range into the
+    full dtype range of the input and output dtypes. Signed integer types are
+    assumed to have no negative values
+    """
+    if dtype is None:
+        dtype = image.dtype
+    image = image.copy().astype(np.float64)
+
+    # IN RANGE
+    if in_range is None:
+        in_range = (None, None)
+
+    in_lo = in_range[0]
+    if in_lo is None or in_lo == float("-inf") or isnan(in_lo):
+        if use_data:
+            in_lo = np.nanmin(image)
+        else:
+            in_lo = get_dtype_range(image.dtype, allow_negative=negative_in)[0]
+    assert not isinf(in_lo) and not isnan(in_lo) and in_lo is not None
+
+    in_hi = in_range[1]
+    if in_hi is None or in_hi == float("+inf") or isnan(in_hi):
+        if use_data:
+            in_hi = np.nanmax(image)
+        else:
+            in_hi = get_dtype_range(image.dtype, allow_negative=negative_in)[1]
+    assert not isinf(in_hi) and not isnan(in_hi) and in_hi is not None
+
+    assert in_lo <= in_hi
+    in_range = (in_lo, in_hi)
+
+    # OUT RANGE
+    if out_range is None:
+        out_range = (None, None)
+
+    out_lo = out_range[0]
+    if out_lo is None or out_lo == float("-inf") or isnan(out_lo):
+        out_lo = get_dtype_range(dtype, allow_negative=negative_out)[0]
+    assert not isinf(in_lo) and not isnan(in_lo) and in_lo is not None
+
+    out_hi = out_range[1]
+    if out_hi is None or out_hi == float("+inf") or isnan(out_hi):
+        out_hi = get_dtype_range(dtype, allow_negative=negative_out)[1]
+    assert not isinf(out_hi) and not isnan(out_hi) and out_hi is not None
+
+    assert out_lo <= out_hi
+    out_range = (out_lo, out_hi)
+
+    if in_range[0] == in_range[1] or out_range[0] == out_range[1]:
+        out = image
+    else:
+        med = (image - in_range[0]) / (in_range[1] - in_range[0])
+        out = med * (out_range[1] - out_range[0]) + out_range[0]
+
     if clip:
         out = np.clip(out, out_range[0], out_range[1])
-    return out.astype(image.dtype)
+
+    return out.astype(dtype)
 
 
 def resize(image, method="area", size=None, scale=1.0):
@@ -486,8 +567,8 @@ def save(path: PathLike, image):
     """Saves an image to disk at the location specified by path.
     """
     image = image.copy()
-    if np.issubdtype(image.dtype, np.floating):
-        image = float_to_uint8(image)
+    if dtype is not None:
+        image = to_dtype(image, dtype=dtype)
     if image.shape[-1] == 1:
         image = image.squeeze(axis=-1)
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
@@ -536,14 +617,6 @@ def standardize(images):
     u = np.mean(images)
     standardized = (images - u) / s
     return standardized
-
-
-def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
-    """Converts a uint8 image to a float image. If clip is set to True, values
-    are clipped to float_range."""
-    return rescale(
-        uint8_image.astype(np.float), in_range=(0.0, 255.0), out_range=float_range
-    )
 
 
 def unpatchify(patches, patch_counts, padding):
