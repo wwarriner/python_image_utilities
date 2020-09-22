@@ -9,6 +9,12 @@ from image_util import *
 
 class Test(unittest.TestCase):
     def setUp(self):
+        self.IMAGES = {
+            "snow": self._read_snow_image,
+            "tulips": self._read_tulips_image,
+            "noise": self._generate_image,
+        }
+
         self.side_len = np.iinfo(np.uint8).max
         self.base_shape = (self.side_len, self.side_len)
 
@@ -34,18 +40,13 @@ class Test(unittest.TestCase):
         self.patch_shape = (12, 13)
         self.offsets = [(0, 0), (1, 0), (0, 1), (1, 1), self.patch_shape]
 
-        self.base_path = PurePath("test")
-        self.test_image_path = self.base_path / "test.jpg"
-        self.tulips_image_path = self.base_path / "tulips.png"
+        self.res_path = PurePath("test") / "res"
+        self.base_path = self.res_path / "base"
+        self.snow_image_path = self.base_path / "snow.jpg"
+        self.tulips_image_path = self.base_path / "tulips.jpg"
 
     def tearDown(self):
         pass
-
-    def read_test_image(self):
-        return load(str(self.test_image_path))
-
-    def read_tulips_image(self):
-        return load(str(self.tulips_image_path))
 
     def show(self, image, tag):
         show(image, tag)
@@ -56,22 +57,40 @@ class Test(unittest.TestCase):
     def reduce_contrast(self, image):
         factor = 3.0
         minimum = 50
-        return (np.round(image / factor) + 50).astype(np.uint8)
+        return (np.round(image / factor) + minimum).astype(np.uint8)
 
-    def generate_image(self):
-        image = generate_noise(self.base_shape)
+    def _generate_image(self, shape=(100, 100)):
+        image = generate_noise(shape=shape, offsets=(3.14159, 2.71828))
+        image = image[..., np.newaxis]
         return self.reduce_contrast(image)
 
-    def read_gray_image(self):
-        image = cv2.imread(str(self.test_image_path))
-        image = rgb2gray(image)
-        return self.reduce_contrast(image)
+    def _read_gray_image(self):
+        out = self._read_tulips_image()
+        out = to_gray(out)
+        return out
 
-    def run_fn(self, image, fn, *args, **kwargs):
+    def _read_snow_image(self):
+        return load(str(self.snow_image_path))
+
+    def _read_tulips_image(self):
+        return load(str(self.tulips_image_path))
+
+    def run_fn(self, image, fn, name=None, ext=None, *args, **kwargs):
         out = fn(image, *args, **kwargs)
-        vis = np.concatenate((image, out), axis=0)
-        tag = "test: {}".format(fn.__name__)
-        self.show(vis, tag)
+        # vis = np.concatenate((image, out), axis=0)
+        # tag = "test: {}".format(fn.__name__)
+        # self.show(vis, tag)
+        if ext is None:
+            ext = ".png"
+        if name is not None:
+            save(out, self.res_path / (name + ext))
+        return out
+
+    def assert_image_equal(self, actual, expected_name, ext=None):
+        if ext is None:
+            ext = ".png"
+        expected = load(self.res_path / (expected_name + ext))
+        np.testing.assert_array_equal(actual, expected)
 
     def standardize(self, image):
         standardized = standardize(image)
@@ -81,13 +100,30 @@ class Test(unittest.TestCase):
         return rescale(image, out_range=(0, 255)).astype(np.uint8)
 
     def test_adjust_gamma(self):
-        self.run_fn(self.read_gray_image(), adjust_gamma, 2.0)
-        self.run_fn(self.generate_image(), adjust_gamma, 2.0)
-        # TODO add structured assertions here
+        base_name = "adjust_gamma_{:s}_{:s}"
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "2")
+            out = self.run_fn(image_fn(), adjust_gamma, gamma=2.0, name=name)
+            self.assert_image_equal(out, name)
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "05")
+            out = self.run_fn(image_fn(), adjust_gamma, gamma=0.5, name=name)
+            self.assert_image_equal(out, name)
 
-    def test_apply_clahe(self):
-        self.run_fn(self.read_gray_image(), clahe)
-        self.run_fn(self.generate_image(), clahe)
+    def test_clahe(self):
+        base_name = "clahe_{:s}_{:s}"
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "default")
+            out = self.run_fn(image_fn(), clahe, name=name)
+            self.assert_image_equal(out, name)
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "2_2")
+            out = self.run_fn(image_fn(), clahe, tile_size=(2, 2), name=name)
+            self.assert_image_equal(out, name)
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "20_20")
+            out = self.run_fn(image_fn(), clahe, tile_size=(20, 20), name=name)
+            self.assert_image_equal(out, name)
         # TODO add structured assertions here
 
     def test_consensus(self):
@@ -96,68 +132,75 @@ class Test(unittest.TestCase):
         B = np.array([[0, 1], [1, 1]])
         C = np.array([[0, 0], [1, 1]])
         D = np.array([[0, 0], [0, 1]])
-        data = np.stack([A, B, C, D])
+        data_int = np.stack([A, B, C, D])
+        data_int = data_int[..., np.newaxis]
+        data_bool = data_int.copy().astype(np.bool)
 
-        RESULT_MIN = np.array([[0, 0], [1, 1]])[np.newaxis, ...]
-        con = consensus(data, threshold="majority")
+        self.assertRaises(AssertionError, consensus, data_int[0, ...])
+        self.assertRaises(AssertionError, consensus, data_bool[0, ...])
+        self.assertRaises(AssertionError, consensus, data_int, threshold=1)
+        self.assertRaises(AssertionError, consensus, data_bool, threshold="majority")
+
+        RESULT_MIN = np.array([[0, 0], [1, 1]])[..., np.newaxis]
+        con = consensus(data_bool)
+        self.assertTrue((con == RESULT_MIN).all())
+        con = consensus(data_int)
+        self.assertTrue((con == RESULT_MIN).all())
+        con = consensus(data_int, threshold="majority")
         self.assertTrue((con == RESULT_MIN).all())
 
-        RESULT_ZERO = np.array([[1, 1], [1, 1]])
-        con = consensus(data, threshold=0)
+        RESULT_ZERO = np.array([[1, 1], [1, 1]])[..., np.newaxis]
+        con = consensus(data_bool, threshold=0)
         self.assertTrue((con == RESULT_ZERO).all())
-        con = consensus(data, threshold=0.0)
+        con = consensus(data_bool, threshold=0.0)
         self.assertTrue((con == RESULT_ZERO).all())
 
-        RESULT_ONE = RESULT_ZERO
-        con = consensus(data, threshold=1)
+        RESULT_ONE = np.array([[0, 1], [1, 1]])[..., np.newaxis]
+        con = consensus(data_bool, threshold=1)
         self.assertTrue((con == RESULT_ONE).all())
-        con = consensus(data, threshold=0.25)
+        con = consensus(data_bool, threshold=0.25)
         self.assertTrue((con == RESULT_ONE).all())
 
-        RESULT_TWO = np.array([[0, 1], [1, 1]])
-        con = consensus(data, threshold=2)
+        RESULT_TWO = np.array([[0, 0], [1, 1]])[..., np.newaxis]
+        con = consensus(data_bool, threshold=2)
         self.assertTrue((con == RESULT_TWO).all())
-        con = consensus(data, threshold=0.5)
+        con = consensus(data_bool, threshold=0.5)
         self.assertTrue((con == RESULT_TWO).all())
 
-        RESULT_THREE = RESULT_MIN
-        con = consensus(data, threshold=3)
+        RESULT_THREE = np.array([[0, 0], [0, 1]])[..., np.newaxis]
+        con = consensus(data_bool, threshold=3)
         self.assertTrue((con == RESULT_THREE).all())
-        con = consensus(data, threshold=0.75)
+        con = consensus(data_bool, threshold=0.75)
         self.assertTrue((con == RESULT_THREE).all())
 
-        RESULT_FOUR = np.array([[0, 0], [0, 1]])
-        con = consensus(data, threshold=4)
+        RESULT_FOUR = np.array([[0, 0], [0, 0]])[..., np.newaxis]
+        con = consensus(data_bool, threshold=4)
         self.assertTrue((con == RESULT_FOUR).all())
-        con = consensus(data, threshold=1.0)
+        con = consensus(data_bool, threshold=1.0)
         self.assertTrue((con == RESULT_FOUR).all())
-
-        RESULT_FIVE = np.array([[0, 0], [0, 0]])
-        con = consensus(data, threshold=5)
-        self.assertTrue((con == RESULT_FIVE).all())
 
         # MULTI_CLASS
         A = np.array([[1, 2], [2, 2]])
         B = np.array([[0, 1], [2, 2]])
         C = np.array([[0, 1], [1, 2]])
         D = np.array([[0, 0], [1, 1]])
-        data = np.stack([A, B, C, D])
+        data_mc = np.stack([A, B, C, D])
+        data_mc = data_mc.astype(np.uint8)
+        data_mc = data_mc[..., np.newaxis]
 
-        RESULT_MIN = np.array([[0, 1], [1, 2]])
-        con = consensus(data, threshold="majority")
+        RESULT_MIN = np.array([[0, 1], [1, 2]])[..., np.newaxis]
+        con = consensus(data_mc, threshold="majority")
         self.assertTrue((con == RESULT_MIN).all())
-
-        self.assertRaises(AssertionError, consensus, data, threshold=1)
-        self.assertRaises(AssertionError, consensus, data, threshold=1)
 
     def test_load_images(self):
         images, names = load_images(self.base_path)
         self.assertEqual(len(images), 2)
         self.assertEqual(len(names), 2)
-        self.assertEqual(names[0], self.test_image_path)
+        self.assertEqual(names[0], self.snow_image_path)
         self.assertEqual(names[1], self.tulips_image_path)
 
     def test_montage(self):
+        # TODO here
         patches, _, _ = patchify(self.rgb, self.patch_shape)
         count = patches.shape[0]
         montage_len = floor(count ** 0.5)
@@ -186,10 +229,11 @@ class Test(unittest.TestCase):
         self.show(m, "test: with auto-shape")
 
     def test_overlay(self):
-        image = self.read_test_image()
-        noise = generate_noise(image.shape)[..., np.newaxis]
+        bg = self._read_tulips_image()
+        fg = self._generate_image(shape=bg.shape[:-1])
         color = [0.5, 1.0, 0.2]
-        self.show(overlay(image, noise, color, alpha=0.2, beta=0.8), "test: overlay")
+        self.show(overlay(bg, fg, color, alpha=0.8, beta=0.2), "test: overlay")
+        # TODO automate checking
 
     def test_patchify(self):
         for offset in self.offsets:
@@ -224,16 +268,37 @@ class Test(unittest.TestCase):
             self.assertTrue((all_padding == all_reqd_padding).all())
 
     def test_rescale(self):
-        self.run_fn(self.read_gray_image(), self.rescale)
-        self.run_fn(self.generate_image(), self.rescale)
-        # TODO add structured assertions here
+        base_name = "rescale_{:s}_{:s}"
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "out_0_128_uint8")
+            out = self.run_fn(
+                image_fn(),
+                rescale,
+                out_range=(0, 128),
+                dtype=np.uint8,
+                clip=True,
+                name=name,
+            )
+            self.assert_image_equal(out, name)
+        for name, image_fn in self.IMAGES.items():
+            name = base_name.format(name, "in_0_128_float64")
+            out = self.run_fn(
+                image_fn(),
+                rescale,
+                in_range=(0, 128),
+                dtype=np.uint8,
+                clip=True,
+                name=name,
+            )
+            self.assert_image_equal(out, name)
 
     def test_save_load(self):
         try:
             path = PurePath("image_util_test_output.png")
-            save(str(path), self.rgb.astype(np.uint8))
-            self.show(load(str(path)), "test: save/load")
-            cv2.waitKey(self.wait_time)
+            expected = self.rgb.astype(np.uint8)
+            save(expected, str(path))
+            actual = load(str(path))
+            np.testing.assert_array_equal(actual, expected)
         finally:
             if Path(path).is_file():
                 Path(path).unlink()
@@ -241,11 +306,9 @@ class Test(unittest.TestCase):
     def test_show(self):
         self.show(self.rgb.astype(np.uint8), "test: visualize_rgb (blue and green?)")
         self.show(self.rgb[..., 0], "test: visualize_gray (is gradient?)")
-        self.show(
-            (self.mask * 255).astype(np.uint8), "test: visualize_gray (is circle?)"
-        )
-        self.show(rgb2gray(self.read_tulips_image()), "test: visualize_gray (is gray?)")
-        self.show(self.read_tulips_image(), "test: visualize_color (is color?)")
+        self.show(to_dtype(self.mask, np.uint8), "test: visualize_gray (is circle?)")
+        self.show(self._read_gray_image(), "test: visualize_gray (is gray?)")
+        self.show(self._read_tulips_image(), "test: visualize_color (is color?)")
 
     def test_stack(self):
         n = 3
@@ -255,8 +318,8 @@ class Test(unittest.TestCase):
         self.assertIsInstance(s, np.ndarray)
 
     def test_standardize(self):
-        self.run_fn(self.read_gray_image(), self.standardize)
-        self.run_fn(self.generate_image(), self.standardize)
+        self.run_fn(self._read_snow_image(), self.standardize)
+        self.run_fn(self._generate_image(), self.standardize)
         # TODO add structured assertions here
 
     def test_unpatchify(self):
@@ -270,11 +333,15 @@ class Test(unittest.TestCase):
             self.assertEqual(images.shape, input_images.shape)
             self.assertTrue((input_images == images).all())
 
-    # TODO test_load_folder
     # TODO test_save_images
     # TODO test_mask_images
     # TODO test_get_center
     # TODO test_generate_circular_fov_mask
+    # TODO test_generate_noise
+    # TODO gray_to_color
+    # TODO resize
+    # TODO to_dtype
+    # TODO
 
 
 if __name__ == "__main__":
