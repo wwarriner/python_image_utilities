@@ -9,3 +9,4 @@ dependencies:
   - pip
   - pip:
       - opencv-python
+      - tifffile==2020.9.3
