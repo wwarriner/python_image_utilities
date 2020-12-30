@@ -14,7 +14,7 @@ import scipy.stats
 import skimage
 import tifffile.tifffile as tf
 
-from inc.file_utils.file_utils import get_contents
+from .inc.file_utils.file_utils import get_contents
 
 # TODO
 # 3) automate test-cases (no visuals, just check against values from private
