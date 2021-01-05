@@ -728,7 +728,6 @@ def resize(image, method="linear", size=None, scale=1.0):
         "cubic": cv2.INTER_CUBIC,
         "area": cv2.INTER_AREA,
         "lanczos4": cv2.INTER_LANCZOS4,
-        "nearest_exact": cv2.INTER_NEAREST_EXACT,
         "linear_exact": cv2.INTER_LINEAR_EXACT,
     }
     assert method in METHODS
