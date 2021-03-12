@@ -30,7 +30,7 @@ def _copy(fn) -> Callable:
     @functools.wraps(fn)
     def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
         kwargs = _update_with_defaults(fn, kwargs)
-        print(kwargs)
+        # print(kwargs)
         out = image.copy()
         out = fn(out, *args, **kwargs)
         return out
@@ -48,7 +48,7 @@ def _as_dtype(dtype) -> Callable:
             old_dtype = image.dtype
             out = to_dtype(image, dtype=dtype, negative_in=use_signed_negative)
             out = fn(out, *args, **kwargs)
-            print(type(out))
+            # print(type(out))
             out = to_dtype(out, dtype=old_dtype, negative_out=use_signed_negative)
             assert out.dtype == old_dtype
             return out
@@ -209,8 +209,8 @@ def consensus(
     Output:
     1) HW1 image with same dtype as input
     """
-    print(threshold)
-    print(type(threshold))
+    # print(threshold)
+    # print(type(threshold))
     assert _is_stack(stack)
     assert _is_gray(stack)
 
@@ -233,7 +233,6 @@ def consensus(
         assert np.issubdtype(dtype, np.integer)
     elif isinstance(threshold, int):
         assert 0 <= threshold
-        assert dtype == np.bool
     else:
         assert False
 
