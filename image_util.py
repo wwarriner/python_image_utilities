@@ -789,7 +789,7 @@ def save_images(paths, image_stack):
     assert _is_stack(image_stack)
     assert len(paths) == len(image_stack)
     for path, image in zip(paths, image_stack):
-        save(path, image)
+        save(image=image, path=path)
 
 
 def show(image, tag="UNLABELED_WINDOW"):
