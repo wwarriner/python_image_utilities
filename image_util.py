@@ -363,6 +363,7 @@ def load_images(
         try:
             image = load(str(image_file), force_rgb=force_rgb)
         except Exception as e:
+            print("warning while loading image: {:s}\n{:s}".format(image_file, str(e)))
             continue
         images.append(image)
         names.append(image_file)
