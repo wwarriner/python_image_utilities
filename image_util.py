@@ -497,6 +497,8 @@ def overlay(
     dtype = background.dtype
     background = background.copy()
     background = to_dtype(background, dtype=np.int32, negative_in=use_signed_negative)
+    if _is_gray(background):
+        background = gray_to_color(background, color=[1.0, 1.0, 1.0])
 
     foreground = foreground.copy()
     foreground = to_dtype(foreground, dtype=np.int32, negative_in=use_signed_negative)
