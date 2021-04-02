@@ -1,6 +1,6 @@
 import random
 
-from image_util import get_center
+from .image_util import get_center
 
 
 def extract_patch(image, patch_shape, patch_center):
