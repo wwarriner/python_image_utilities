@@ -73,7 +73,9 @@ def to_colorspace(
 @_copy
 def to_gray(image: np.ndarray, use_signed_negative: bool = False):
     assert _is_image(image)
-    assert _is_color(image)
+    if not _is_color(image):
+        assert _is_gray(image)
+        return image
 
     out = skimage.color.rgb2gray(image)
     out = _add_channel_dim(out)
