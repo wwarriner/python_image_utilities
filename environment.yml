@@ -1,3 +1,4 @@
+name: image-utils
 channels:
   - conda-forge
   - defaults
@@ -7,6 +8,9 @@ dependencies:
   - pillow
   - python
   - pip
+  - scipy
+  - scikit-image
   - pip:
       - opencv-python
       - tifffile==2020.9.3
+      - suffix-trees
