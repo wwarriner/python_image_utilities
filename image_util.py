@@ -627,7 +627,9 @@ def rescale(
     dtype may be used to change the dtype. The function uses np.float64 as a
     common language. All scaling is performed linearly.
 
-    If a dtype is supplied, the output image will have that dtype.
+    If a dtype is supplied, the output image will have that dtype. Do not use
+    this function for thresholding with dtype np.bool. Output images are
+    ultimately converted using as_type().
 
     If clip is set to True, the resulting image values are clipped to the
     narrower of out_range or the limits of the output dtype. Naturally, values
@@ -699,11 +701,10 @@ def rescale(
     assert out_lo <= out_hi
     out_range = (out_lo, out_hi)
 
-    if in_range[0] == in_range[1] or out_range[0] == out_range[1]:
-        out = image
-    else:
-        med = (image - in_range[0]) / (in_range[1] - in_range[0])
-        out = med * (out_range[1] - out_range[0]) + out_range[0]
+    out = image
+    if in_range[0] != in_range[1] and out_range[0] != out_range[1]:
+        out = (out - in_range[0]) / (in_range[1] - in_range[0])
+        out = out * (out_range[1] - out_range[0]) + out_range[0]
 
     if clip:
         out = np.clip(out, out_range[0], out_range[1])
@@ -836,7 +837,7 @@ def standardize(images):
 
 
 def to_dtype(
-    image: np.ndarray, dtype, negative_in: bool = False, negative_out: bool = False
+    image: np.ndarray, dtype, negative_in: bool = True, negative_out: bool = True
 ) -> np.ndarray:
     """
     Converts image to desired dtype by rescaling input dtype value range into
@@ -848,9 +849,9 @@ def to_dtype(
     1) image - 2D image to convert to dtype.
     2) dtype - Desired output dtype.
     3) negative_in - (bool) Use full signed integer range for input dtype.
-       Default is False.
+       Default is True.
     4) negative_out - (bool) Use full signed integer range for output dtype.
-       Default is False.
+       Default is True.
 
     IMPORTANT: For single-channel images, most file formats only support
     unsigned integer types. TIFF allow signed integer types. For multi-channel

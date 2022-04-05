@@ -8,6 +8,58 @@ from image_util import *
 
 
 class Test(unittest.TestCase):
+    def test_to_dtype(self):
+        # unsigned to signed and back
+        expected = np.arange(0, 256, dtype=np.uint8)
+        im = to_dtype(expected, dtype=np.int8)
+        actual = to_dtype(im, dtype=np.uint8)
+        np.testing.assert_array_equal(actual, expected)
+
+        # signed to unsigned and back
+        expected = np.arange(-128, 128, dtype=np.int8)
+        im = to_dtype(expected, dtype=np.uint8)
+        actual = to_dtype(im, dtype=np.int8)
+        np.testing.assert_array_equal(actual, expected)
+
+        # float to unsigned and back
+        im = np.linspace(0.0, 1.0, 100, dtype=np.float64)
+        expected = (im * 255.0).astype(np.uint8).astype(np.float64) / 255.0
+        im = to_dtype(im, dtype=np.uint8)
+        actual = to_dtype(im, dtype=np.float64)
+        np.testing.assert_array_equal(actual, expected)
+
+        # float to signed and back
+        im = np.linspace(0.0, 1.0, 100, dtype=np.float64)
+        expected = (im * 255.0 - 128.0).astype(np.int8)
+        expected = (expected + 128.0).astype(np.float64) / 255.0
+        im = to_dtype(im, dtype=np.int8)
+        actual = to_dtype(im, dtype=np.float64)
+        np.testing.assert_array_equal(actual, expected)
+
+        # unsigned to bool and back
+        im = np.arange(0, 256, dtype=np.uint8)
+        expected = np.ones_like(im) * 255
+        expected[0] = 0
+        im = to_dtype(im, dtype=np.bool)
+        actual = to_dtype(im, dtype=np.uint8)
+        np.testing.assert_array_equal(actual, expected)
+
+        # signed to logical and back
+        im = np.arange(-128, 128, dtype=np.int8)
+        expected = np.ones_like(im) * 127
+        expected[0] = -128
+        im = to_dtype(im, dtype=np.bool)
+        actual = to_dtype(im, dtype=np.int8)
+        np.testing.assert_array_equal(actual, expected)
+
+        # float to logical and back
+        im = np.linspace(0.0, 1.0, 100, dtype=np.float64)
+        expected = np.ones_like(im)
+        expected[0] = 0.0
+        im = to_dtype(im, dtype=np.bool)
+        actual = to_dtype(im, dtype=np.float64)
+        np.testing.assert_array_equal(actual, expected)
+
     def setUp(self):
         self.IMAGES = {
             "snow": self._read_snow_image,
