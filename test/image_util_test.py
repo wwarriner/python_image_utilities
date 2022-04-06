@@ -1,13 +1,84 @@
 import unittest
-from pathlib import PurePath, Path
-from math import ceil
+from pathlib import Path, PurePath
 
 import numpy as np
-
 from image_util import *
 
 
 class Test(unittest.TestCase):
+    def test_unpatchify_stack(self):
+        OFFSET = (3, 7)
+        expected = np.random.rand(*(4, 11, 13, 1))
+        actual = patchify_stack(expected, (3, 4), OFFSET)
+        actual = unpatchify_stack(actual, expected.shape, OFFSET)
+        np.testing.assert_array_equal(actual, expected)
+
+    def test_unpatchify_image(self):
+        # 2D, uneven division, offset, roundtrip
+        OFFSET = (1, 1)
+        expected = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])[..., np.newaxis]
+        actual = patchify_image(expected, (2, 3), OFFSET)
+        actual = unpatchify_image(actual, expected.shape, OFFSET)
+        np.testing.assert_array_equal(actual, expected)
+
+        # 2D, random, roundtrip
+        OFFSET = (3, 7)
+        expected = np.random.rand(*(11, 13, 1))
+        actual = patchify_image(expected, (3, 4), OFFSET)
+        actual = unpatchify_image(actual, expected.shape, OFFSET)
+        np.testing.assert_array_equal(actual, expected)
+
+    def test_patchify_image(self):
+        # 1D, even division, along X
+        im = np.array([0, 1, 2, 3])[..., np.newaxis, np.newaxis]
+        actual = patchify_image(im, (2, 1))
+        expected = np.array([[0, 1], [2, 3]])[..., np.newaxis, np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # # 1D, even division, along Y
+        im = np.array([[0, 1, 2, 3]])[..., np.newaxis]
+        actual = patchify_image(im, (1, 2))
+        expected = np.array([[[0, 1]], [[2, 3]]])[..., np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # # 1D, uneven division, along X
+        im = np.array([0, 1, 2, 3, 4])[..., np.newaxis, np.newaxis]
+        actual = patchify_image(im, (2, 1))
+        expected = np.array([[0, 1], [2, 3], [4, 0]])[..., np.newaxis, np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # # 1D, uneven division, along Y
+        im = np.array([[0, 1, 2, 3, 4]])[..., np.newaxis]
+        actual = patchify_image(im, (1, 2))
+        expected = np.array([[[0, 1]], [[2, 3]], [[4, 0]]])[..., np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # # 1D, uneven division, offset, along X
+        im = np.array([0, 1, 2, 3, 4])[..., np.newaxis, np.newaxis]
+        actual = patchify_image(im, (2, 1), (1, 0))
+        expected = np.array([[0, 0], [1, 2], [3, 4]])[..., np.newaxis, np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # # 1D, uneven division, offset, along Y
+        im = np.array([[0, 1, 2, 3, 4]])[..., np.newaxis]
+        actual = patchify_image(im, (1, 2), (0, 1))
+        expected = np.array([[[0, 0]], [[1, 2]], [[3, 4]]])[..., np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # 2D, uneven division, offset
+        im = np.array([[0, 1, 2], [3, 4, 5]])[..., np.newaxis]
+        actual = patchify_image(im, (2, 2), (1, 1))
+        expected = np.array(
+            [[[0, 0], [0, 0]], [[0, 0], [1, 2]], [[0, 3], [4, 5]], [[0, 0], [0, 0]]]
+        )[..., np.newaxis]
+        np.testing.assert_array_equal(actual, expected)
+
+        # 1D, channels
+        im = np.array([[[0, 1, 2]]])
+        actual = patchify_image(im, (2, 2), (1, 1))
+        expected = np.array([[[[0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 1, 2]]]])
+        np.testing.assert_array_equal(actual, expected)
+
     def test_to_dtype(self):
         # unsigned to signed and back
         expected = np.arange(0, 256, dtype=np.uint8)
@@ -287,38 +358,6 @@ class Test(unittest.TestCase):
         self.show(overlay(bg, fg, color, alpha=0.8, beta=0.2), "test: overlay")
         # TODO automate checking
 
-    def test_patchify(self):
-        for offset in self.offsets:
-            reqd_pre_padding = (
-                np.array(self.patch_shape) - np.array(offset)
-            ) % np.array(self.patch_shape)
-            reqd_post_padding = self.patch_shape - np.remainder(
-                np.array(self.rgb.shape[:-1]) + reqd_pre_padding,
-                np.array(self.patch_shape),
-            )
-            reqd_padding = list(zip(reqd_pre_padding, reqd_post_padding))
-            padded_shape = self.rgb.shape[:-1] + reqd_pre_padding + reqd_post_padding
-            counts = np.array(
-                [ceil(x / y) for x, y in zip(padded_shape, self.patch_shape)]
-            )
-            count = counts.prod()
-            patches, patch_count, padding = patchify(
-                self.rgb, self.patch_shape, offset=offset
-            )
-
-            self.assertEqual(patches.ndim, self.rgb.ndim + 1)
-            self.assertEqual(patches.shape[0], count)
-            self.assertEqual(patches.shape[1:3], self.patch_shape)
-            self.assertEqual(patches.shape[3], self.rgb.shape[2])
-
-            self.assertEqual(len(patch_count), 2)
-            self.assertTrue((patch_count == counts.ravel()).all())
-
-            self.assertEqual(len(padding), 2)
-            all_padding = np.array([list(p) for p in padding])
-            all_reqd_padding = np.array([list(p) for p in reqd_padding])
-            self.assertTrue((all_padding == all_reqd_padding).all())
-
     def test_rescale(self):
         base_name = "rescale_{:s}_{:s}"
         for name, image_fn in self.IMAGES.items():
@@ -373,17 +412,6 @@ class Test(unittest.TestCase):
         self.run_fn(self._read_snow_image(), self.standardize)
         self.run_fn(self._generate_image(), self.standardize)
         # TODO add structured assertions here
-
-    def test_unpatchify(self):
-        input_images = np.stack((self.rgb, self.rgb))
-        for offset in self.offsets:
-            patches, patch_count, padding = patchify(
-                input_images, self.patch_shape, offset=offset
-            )
-            images = unpatchify(patches, patch_count, padding)
-            self.assertEqual(images.ndim, self.rgb.ndim + 1)
-            self.assertEqual(images.shape, input_images.shape)
-            self.assertTrue((input_images == images).all())
 
     # TODO test_save_images
     # TODO test_mask_images
