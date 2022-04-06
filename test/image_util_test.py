@@ -1,4 +1,5 @@
 import unittest
+from math import ceil
 from pathlib import Path, PurePath
 
 import numpy as np
@@ -6,6 +7,48 @@ from image_util import *
 
 
 class Test(unittest.TestCase):
+    def test_montage(self):
+        # basic
+        expected = np.ones((2, 2, 3))
+        actual = montage(np.ones((4, 1, 1, 3)), image_counts=(2, 2))
+        np.testing.assert_array_equal(actual, expected)
+
+        # basic, repeat
+        expected = np.ones((2, 2, 3))
+        actual = montage(np.ones((1, 1, 1, 3)), image_counts=(2, 2), repeat=True)
+        np.testing.assert_array_equal(actual, expected)
+
+        # basic, start 1
+        expected = np.ones((2, 2, 3))
+        expected[-1, -1] = 0.0
+        actual = montage(np.ones((4, 1, 1, 3)), image_counts=(2, 2), start=1)
+        np.testing.assert_array_equal(actual, expected)
+
+        # basic, max 1
+        expected = np.zeros((2, 2, 3))
+        expected[0, 0] = 1.0
+        actual = montage(np.ones((4, 1, 1, 3)), image_counts=(2, 2), maximum_images=1)
+        np.testing.assert_array_equal(actual, expected)
+
+        # larger
+        patch_count = (22, 20)
+        patch_shape = tuple(
+            [ceil(s / c) for s, c in zip(self.rgb.shape[:-1], patch_count)]
+        )
+        patches = patchify_image(self.rgb, patch_shape)
+        expected = unpatchify_image(patches, image_shape=self.rgb.shape, offset=(0, 0))
+        padding = list(
+            [
+                (0, (p * c) - x)
+                for p, c, x in zip(patch_shape, patch_count, self.rgb.shape[:-1])
+            ]
+        )
+        padding.append((0, 0))
+        padding = tuple(padding)
+        expected = np.pad(expected, padding)
+        actual = montage(patches, image_counts=patch_count)
+        np.testing.assert_array_equal(actual, expected)
+
     def test_save_load(self):
         # rgb
         try:
@@ -371,35 +414,6 @@ class Test(unittest.TestCase):
         self.assertEqual(len(names), 2)
         self.assertEqual(names[0], self.snow_image_path)
         self.assertEqual(names[1], self.tulips_image_path)
-
-    def test_montage(self):
-        # TODO here
-        patches, _, _ = patchify(self.rgb, self.patch_shape)
-        count = patches.shape[0]
-        montage_len = floor(count**0.5)
-        montage_shape = (montage_len, montage_len)
-        # sequential order (baseline)
-        m = montage(patches, montage_shape)
-        self.show(m, "test: sequential")
-        # random order
-        m = montage(patches, montage_shape, mode="random")
-        self.show(m, "test: random")
-        # non-zero start
-        start = 5 * count // 13
-        m = montage(patches, montage_shape, mode="random", start=start)
-        self.show(m, "test: start={}".format(start))
-        # with repeats
-        m = montage(patches, montage_shape, mode="random", repeat=True, start=start)
-        self.show(m, "test: with repeats")
-        # auto shape
-        m = montage(patches, mode="random", repeat=True, start=start)
-        self.show(m, "test: with auto-shape")
-        # defined aspect ratio
-        m = montage(patches, 2.0, mode="random", repeat=True, start=start)
-        self.show(m, "test: with auto-shape")
-        # defined aspect ratio
-        m = montage(patches, 2.0, mode="random", start=start)
-        self.show(m, "test: with auto-shape")
 
     def test_overlay(self):
         bg = self._read_tulips_image()

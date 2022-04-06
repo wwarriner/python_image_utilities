@@ -1,6 +1,6 @@
 import functools
 import inspect
-from itertools import chain, cycle, islice
+import itertools
 from math import floor, isinf, isnan
 from pathlib import Path, PurePath
 from random import shuffle
@@ -385,11 +385,11 @@ def mask_images(images, masks):
 
 def montage(
     images,
-    shape=None,
+    image_counts=None,
     mode="sequential",
     repeat=False,
     start=0,
-    maximum_images=36,
+    maximum_images=None,
     fill_value=0,
 ):
     """
@@ -422,43 +422,45 @@ def montage(
 
     assert images.ndim == 4
 
-    image_count = images.shape[0] - start
+    image_count_to_guide_shape = images.shape[0] - start
     if maximum_images is not None:
-        image_count = min(maximum_images, image_count)
+        # TODO may be redundant if shape is provided
+        image_count_to_guide_shape = min(maximum_images, image_count_to_guide_shape)
 
-    if shape is None:
-        shape = _optimize_shape(image_count)
-    elif isinstance(shape, (int, float)):
-        shape = _optimize_shape(image_count, width_height_aspect_ratio=shape)
+    if image_counts is None:
+        image_counts = _optimize_shape(image_count_to_guide_shape)
+    elif isinstance(image_counts, (int, float)):
+        image_counts = _optimize_shape(
+            image_count_to_guide_shape, width_height_aspect_ratio=image_counts
+        )
 
     indices = list(range(images.shape[0]))
 
     if mode == "random":
-        shuffle(images)
+        shuffle(indices)
     elif mode == "sequential":
         pass
     else:
         assert False
 
+    image_to_sample_count = int(np.array(image_counts).prod())
+    stop = min(image_to_sample_count, image_count_to_guide_shape) + start
+    indices = itertools.islice(indices, start, stop)
+
     if repeat:
-        iterator = cycle(indices)
+        indices = itertools.cycle(indices)
     else:
-        iterator = chain(indices, cycle([float("inf")]))
+        indices = itertools.chain(indices, itertools.cycle([float("inf")]))
 
-    stop = int(np.array(shape).prod() + start)
-    iterator = islice(iterator, start, stop)
+    indices = itertools.islice(indices, 0, image_to_sample_count)
 
-    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in iterator])
-    montage = montage.reshape((*shape, *images.shape[1:]))
+    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in indices])
+    montage_shape = [c * s for c, s in zip(image_counts, images.shape[1:-1])]
+    montage_shape.append(images.shape[-1])
+    montage_shape = tuple(montage_shape)
+    montage = unpatchify_image(montage, image_shape=montage_shape, offset=(0, 0))
 
-    a, b = _deinterleave(list(range(0, montage.ndim - 1)))
-    a, b = list(a), list(b)
-    dim_order = (*a, *b, montage.ndim - 1)
-    montage = montage.transpose(dim_order)
-
-    image_shape = np.array(shape) * np.array(images.shape[1:-1])
-    image_shape = np.append(image_shape, images.shape[-1])
-    return montage.reshape(image_shape)
+    return montage
 
 
 def overlay(
