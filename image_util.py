@@ -589,18 +589,15 @@ def patchify_image(
 
     # prepare
     offset = tuple([o % s for o, s in zip(offset, patch_shape)])
-    image_shape = image.shape[:-1]
-    channels = image.shape[-1]
 
     # padding
     padding = _compute_patch_padding(
-        patch_shape=patch_shape, offset=offset, image_shape=image_shape
+        patch_shape=patch_shape, offset=offset, image_space_shape=image.shape[:-1]
     )
     padded_image = np.pad(image, padding, *args, **kwargs)
-    padded_image_shape = padded_image[:-1]
 
     # patching
-    stacked_shape = (-1, *patch_shape, channels)
+    stacked_shape = (-1, *patch_shape, image.shape[-1])
     patches = padded_image.reshape(stacked_shape)
 
     return patches
@@ -934,7 +931,7 @@ def unpatchify_image(
 
     # rebuild padded image
     padding = _compute_patch_padding(
-        patch_shape=patch_shape, offset=offset, image_shape=image_shape[:-1]
+        patch_shape=patch_shape, offset=offset, image_space_shape=image_shape[:-1]
     )
     padded_image_shape = [x + p[0] + p[1] for p, x in zip(padding, image_shape)]
     padded_image = patches.reshape(padded_image_shape)
@@ -980,6 +977,21 @@ def _clahe_channel(
     assert _is_gray(out)
 
     return out
+
+
+def _compute_patch_padding(
+    patch_shape: Tuple[int, int],
+    offset: Tuple[int, int],
+    image_space_shape: Tuple[int, int],
+) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
+    pre_pad = [(s - o) % s for s, o in zip(patch_shape, offset)]
+    pre_pad.append(0)  # channels
+    post_pad = [
+        (s - p - x) % s for s, p, x in zip(patch_shape, pre_pad, image_space_shape)
+    ]
+    post_pad.append(0)  # channels
+    padding = tuple(zip(pre_pad, post_pad))
+    return padding
 
 
 def _deinterleave(c):
