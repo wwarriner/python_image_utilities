@@ -16,6 +16,15 @@ from PIL import Image
 
 from inc.file_utils.file_utils import get_contents
 
+"""
+This library is intended for 2D images, and stacks of 2D images. It is not
+suitable for general ND arrays.
+
+When using this library, all images must have three dimensions (h,w,c). All
+image stacks must have four dimensions (n,h,w,c). Most functions will handles
+this automatically, but not all.
+"""
+
 # TODO
 # 3) automate test-cases (no visuals, just check against values from private
 #    data folder, use small, highly-compressed files)
@@ -27,6 +36,10 @@ Number = Union[int, float]
 
 
 def _copy(fn) -> Callable:
+    """
+    Wraps a function with a copy command.
+    """
+
     @functools.wraps(fn)
     def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
         kwargs = _update_with_defaults(fn, kwargs)
@@ -39,6 +52,11 @@ def _copy(fn) -> Callable:
 
 
 def _as_dtype(dtype) -> Callable:
+    """
+    Wraps a function in round-trip dtype conversion. Useful for decorating
+    functions that require a specific dtype.
+    """
+
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(image, *args, **kwargs):
@@ -58,35 +76,11 @@ def _as_dtype(dtype) -> Callable:
     return decorator
 
 
-@_as_dtype(np.float64)
-def to_colorspace(
-    image: np.ndarray, fromspace: str, tospace: str, use_signed_negative: bool = False
-) -> np.ndarray:
-    out = skimage.color.convert_colorspace(
-        image, fromspace=fromspace.upper(), tospace=tospace.upper()
-    )
-    out = _add_channel_dim(out)
-    return out
-
-
-@_as_dtype(np.float64)
-@_copy
-def to_gray(image: np.ndarray, use_signed_negative: bool = False):
-    assert _is_image(image)
-    if not _is_color(image):
-        assert _is_gray(image)
-        return image
-
-    out = skimage.color.rgb2gray(image)
-    out = _add_channel_dim(out)
-
-    assert _is_image(out)
-    assert _is_gray(out)
-
-    return out
-
-
 def _as_colorspace(space: str, fromspace: str = "rgb") -> Callable:
+    """
+    Wraps a function in a roundtrip colorspace conversion.
+    """
+
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(image, *args, **kwargs):
@@ -835,6 +829,20 @@ def standardize(images):
     return standardized
 
 
+@_as_dtype(np.float64)
+def to_colorspace(
+    image: np.ndarray, fromspace: str, tospace: str, use_signed_negative: bool = False
+) -> np.ndarray:
+    """
+    Uses skimage colorspaces in `skimage.color.*`.
+    """
+    out = skimage.color.convert_colorspace(
+        image, fromspace=fromspace.upper(), tospace=tospace.upper()
+    )
+    out = _add_channel_dim(out)
+    return out
+
+
 def to_dtype(
     image: np.ndarray, dtype, negative_in: bool = True, negative_out: bool = True
 ) -> np.ndarray:
@@ -859,6 +867,23 @@ def to_dtype(
     in_range = _get_dtype_range(image.dtype, allow_negative=negative_in)
     out_range = _get_dtype_range(dtype, allow_negative=negative_out)
     return rescale(image, out_range=out_range, in_range=in_range, dtype=dtype)
+
+
+@_as_dtype(np.float64)
+@_copy
+def to_gray(image: np.ndarray, use_signed_negative: bool = False):
+    assert _is_image(image)
+    if not _is_color(image):
+        assert _is_gray(image)
+        return image
+
+    out = skimage.color.rgb2gray(image)
+    out = _add_channel_dim(out)
+
+    assert _is_image(out)
+    assert _is_gray(out)
+
+    return out
 
 
 def unpatchify_stack(
@@ -922,89 +947,10 @@ def unpatchify_image(
     return image
 
 
-def _deinterleave(c):
-    """
-    Separates two interleaved sequences into a tuple of two sequences of the
-    same type.
-    """
-    a = c[0::2]
-    b = c[1::2]
-    return a, b
-
-
-def _get_dtype_range(dtype, allow_negative=False):
-    if np.issubdtype(dtype, np.integer):
-        ii = np.iinfo(dtype)
-        if not allow_negative and np.issubdtype(dtype, np.signedinteger):
-            value = (0, ii.max)
-        else:
-            value = (ii.min, ii.max)
-    elif np.issubdtype(dtype, np.floating):
-        value = (0.0, 1.0)
-    elif dtype == np.bool:
-        value = (False, True)
-    else:
-        raise TypeError("supplied dtype is unsupported: {:s}".format(str(dtype)))
-    return value
-
-
-def _get_image_or_blank(images, index, fill_value=0):
-    try:
-        return images[index]
-    except Exception as e:
-        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
-
-
-def _interleave(a, b):
-    """
-    Interleaves two sequences of the same type into a single sequence.
-    """
-    c = np.empty((a.size + b.size), dtype=a.dtype)
-    c[0::2] = a
-    c[1::2] = b
-    return c
-
-
-def _is_color(image: np.ndarray) -> bool:
-    if image.ndim == 3:
-        is_rgb = image.shape[-1] == 3
-    else:
-        is_rgb = False
-    return is_rgb
-
-
-def _is_gray(image: np.ndarray) -> bool:
-    if image.ndim > 2:
-        is_gray = image.shape[-1] == 1
-    else:
-        is_gray = False
-    return is_gray
-
-
-def _optimize_shape(count, width_height_aspect_ratio=1.0):
-    """
-    Computes the optimal X by Y shape of count objects given a desired
-    width-to-height aspect ratio.
-    """
-    N = count
-    W = np.arange(1, N).astype(np.uint32)
-    H = np.ceil(N / W).astype(np.uint32)
-    closest = np.argmin(np.abs((W / H) - width_height_aspect_ratio))
-    return H[closest], W[closest]
-
-
 def _add_channel_dim(image: np.ndarray) -> np.ndarray:
     if image.ndim == 2:
         image = image[..., np.newaxis]
     return image
-
-
-def _is_stack(image):
-    return image.ndim == 4
-
-
-def _is_image(image):
-    return image.ndim == 3
 
 
 @_as_colorspace("hsv")
@@ -1034,6 +980,16 @@ def _clahe_channel(
     return out
 
 
+def _deinterleave(c):
+    """
+    Separates two interleaved sequences into a tuple of two sequences of the
+    same type.
+    """
+    a = c[0::2]
+    b = c[1::2]
+    return a, b
+
+
 def _get_default_args(func):
     signature = inspect.signature(func)
     return {
@@ -1041,6 +997,65 @@ def _get_default_args(func):
         for k, v in signature.parameters.items()
         if v.default is not inspect.Parameter.empty
     }
+
+
+def _get_dtype_range(dtype, allow_negative=False):
+    if np.issubdtype(dtype, np.integer):
+        ii = np.iinfo(dtype)
+        if not allow_negative and np.issubdtype(dtype, np.signedinteger):
+            value = (0, ii.max)
+        else:
+            value = (ii.min, ii.max)
+    elif np.issubdtype(dtype, np.floating):
+        value = (0.0, 1.0)
+    elif dtype == np.bool:
+        value = (False, True)
+    else:
+        raise TypeError("supplied dtype is unsupported: {:s}".format(str(dtype)))
+    return value
+
+
+def _get_image_or_blank(images, index, fill_value=0):
+    try:
+        return images[index]
+    except Exception as e:
+        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
+
+
+def _is_color(image: np.ndarray) -> bool:
+    if image.ndim == 3:
+        is_rgb = image.shape[-1] == 3
+    else:
+        is_rgb = False
+    return is_rgb
+
+
+def _is_gray(image: np.ndarray) -> bool:
+    if image.ndim > 2:
+        is_gray = image.shape[-1] == 1
+    else:
+        is_gray = False
+    return is_gray
+
+
+def _is_image(image):
+    return image.ndim == 3
+
+
+def _is_stack(image):
+    return image.ndim == 4
+
+
+def _optimize_shape(count, width_height_aspect_ratio=1.0):
+    """
+    Computes the optimal X by Y shape of count objects given a desired
+    width-to-height aspect ratio.
+    """
+    N = count
+    W = np.arange(1, N).astype(np.uint32)
+    H = np.ceil(N / W).astype(np.uint32)
+    closest = np.argmin(np.abs((W / H) - width_height_aspect_ratio))
+    return H[closest], W[closest]
 
 
 def _update_with_defaults(fn: Callable, kwargs: dict) -> dict:
