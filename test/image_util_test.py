@@ -6,6 +6,56 @@ from image_util import *
 
 
 class Test(unittest.TestCase):
+    def test_save_load(self):
+        # rgb
+        try:
+            path = PurePath("image_util_test_output.png")
+            expected = self.rgb.astype(np.uint8)
+            save(expected, str(path))
+            actual = load(str(path))
+            np.testing.assert_array_equal(actual, expected)
+        finally:
+            if Path(path).is_file():
+                Path(path).unlink()
+
+        # gray
+        try:
+            path = PurePath("image_util_test_output.png")
+            expected = self.rgb.astype(np.uint8)
+            expected = expected[..., 0][..., np.newaxis]
+            save(expected, str(path))
+            actual = load(str(path))
+            np.testing.assert_array_equal(actual, expected)
+        finally:
+            if Path(path).is_file():
+                Path(path).unlink()
+
+        # redundant rgb forced rgb
+        try:
+            path = PurePath("image_util_test_output.png")
+            expected = self.rgb.astype(np.uint8)
+            expected[..., 1] = expected[..., 0]
+            expected[..., 2] = expected[..., 0]
+            save(expected, str(path))
+            actual = load(str(path), force_rgb=True)
+            np.testing.assert_array_equal(actual, expected)
+        finally:
+            if Path(path).is_file():
+                Path(path).unlink()
+
+        # redundant rgb
+        try:
+            path = PurePath("image_util_test_output.png")
+            expected = self.rgb.astype(np.uint8)
+            expected[..., 1] = expected[..., 0]
+            expected[..., 2] = expected[..., 0]
+            save(expected, str(path))
+            actual = load(str(path))
+            np.testing.assert_array_equal(actual, expected[..., 0][..., np.newaxis])
+        finally:
+            if Path(path).is_file():
+                Path(path).unlink()
+
     def test_unpatchify_stack(self):
         OFFSET = (3, 7)
         expected = np.random.rand(*(4, 11, 13, 1))
@@ -382,17 +432,6 @@ class Test(unittest.TestCase):
                 name=name,
             )
             self.assert_image_equal(out, name)
-
-    def test_save_load(self):
-        try:
-            path = PurePath("image_util_test_output.png")
-            expected = self.rgb.astype(np.uint8)
-            save(expected, str(path))
-            actual = load(str(path))
-            np.testing.assert_array_equal(actual, expected)
-        finally:
-            if Path(path).is_file():
-                Path(path).unlink()
 
     def test_show(self):
         self.show(self.rgb.astype(np.uint8), "test: visualize_rgb (blue and green?)")

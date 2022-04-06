@@ -317,8 +317,10 @@ def get_center(shape):
 def load(path: PathLike, force_rgb=False):
     """
     Loads an image from the supplied path in grayscale or RGB depending on the
-    source. If force_rgb is True, the image will be returned with 3 channels. If
-    the image has only one channel, then all channels will be identical.
+    source. If the source is RGB and has redundant channels, the image will be
+    converted to grayscale. If force_rgb is True, the image will be returned
+    with 3 channels. If the image has only one channel, then all channels will
+    be identical.
     """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
         image = tf.imread(path)
