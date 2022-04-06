@@ -35,47 +35,6 @@ PathLike = Union[str, Path, PurePath]
 Number = Union[int, float]
 
 
-def _copy(fn) -> Callable:
-    """
-    Wraps a function with a copy command.
-    """
-
-    @functools.wraps(fn)
-    def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
-        kwargs = _update_with_defaults(fn, kwargs)
-        # print(kwargs)
-        out = image.copy()
-        out = fn(out, *args, **kwargs)
-        return out
-
-    return wrapper
-
-
-def _as_dtype(dtype) -> Callable:
-    """
-    Wraps a function in round-trip dtype conversion. Useful for decorating
-    functions that require a specific dtype.
-    """
-
-    def decorator(fn):
-        @functools.wraps(fn)
-        def wrapper(image, *args, **kwargs):
-            kwargs = _update_with_defaults(fn, kwargs)
-            assert "use_signed_negative" in kwargs
-            use_signed_negative = kwargs["use_signed_negative"]
-            old_dtype = image.dtype
-            out = to_dtype(image, dtype=dtype, negative_in=use_signed_negative)
-            out = fn(out, *args, **kwargs)
-            # print(type(out))
-            out = to_dtype(out, dtype=old_dtype, negative_out=use_signed_negative)
-            assert out.dtype == old_dtype
-            return out
-
-        return wrapper
-
-    return decorator
-
-
 def _as_colorspace(space: str, fromspace: str = "rgb") -> Callable:
     """
     Wraps a function in a roundtrip colorspace conversion.
@@ -107,6 +66,47 @@ def _as_colorspace(space: str, fromspace: str = "rgb") -> Callable:
         return wrapper
 
     return decorator
+
+
+def _as_dtype(dtype) -> Callable:
+    """
+    Wraps a function in round-trip dtype conversion. Useful for decorating
+    functions that require a specific dtype.
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(image, *args, **kwargs):
+            kwargs = _update_with_defaults(fn, kwargs)
+            assert "use_signed_negative" in kwargs
+            use_signed_negative = kwargs["use_signed_negative"]
+            old_dtype = image.dtype
+            out = to_dtype(image, dtype=dtype, negative_in=use_signed_negative)
+            out = fn(out, *args, **kwargs)
+            # print(type(out))
+            out = to_dtype(out, dtype=old_dtype, negative_out=use_signed_negative)
+            assert out.dtype == old_dtype
+            return out
+
+        return wrapper
+
+    return decorator
+
+
+def _copy(fn) -> Callable:
+    """
+    Wraps a function with a copy command.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
+        kwargs = _update_with_defaults(fn, kwargs)
+        # print(kwargs)
+        out = image.copy()
+        out = fn(out, *args, **kwargs)
+        return out
+
+    return wrapper
 
 
 @_as_dtype(np.float64)
