@@ -326,7 +326,7 @@ class Test(unittest.TestCase):
         # TODO here
         patches, _, _ = patchify(self.rgb, self.patch_shape)
         count = patches.shape[0]
-        montage_len = floor(count ** 0.5)
+        montage_len = floor(count**0.5)
         montage_shape = (montage_len, montage_len)
         # sequential order (baseline)
         m = montage(patches, montage_shape)
