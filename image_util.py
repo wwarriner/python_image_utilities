@@ -254,7 +254,7 @@ def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
     center = get_center(shape)
     X, Y = np.meshgrid(np.arange(shape[0]) - center[0], np.arange(shape[1]) - center[1])
     R2 = (X - offset[0]) ** 2 + (Y - offset[1]) ** 2
-    fov2 = fov_radius ** 2
+    fov2 = fov_radius**2
     mask = R2 <= fov2
     return mask[..., np.newaxis]
 
