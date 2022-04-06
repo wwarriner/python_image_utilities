@@ -745,7 +745,7 @@ def resize(image, method="linear", size=None, scale=1.0):
         assert isinstance(size[0], int)
         assert isinstance(size[1], int)
 
-        out = cv2.resize(image, size)
+        out = cv2.resize(image, size, interpolation=METHODS[method])
     elif scale is None and size is None:
         assert False
     else:
