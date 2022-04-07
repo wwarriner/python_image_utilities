@@ -7,7 +7,6 @@ from random import shuffle
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import cv2
-import noise
 import numpy as np
 import scipy.stats
 import skimage
