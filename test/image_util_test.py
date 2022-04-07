@@ -121,6 +121,13 @@ class Test(unittest.TestCase):
         actual = unpatchify_image(actual, expected.shape, OFFSET)
         np.testing.assert_array_equal(actual, expected)
 
+        # 2D, photo, roundtrip
+        OFFSET = (3, 7)
+        expected = self._read_snow_image()
+        actual = patchify_image(expected, (32, 32), OFFSET)
+        actual = unpatchify_image(actual, expected.shape, OFFSET)
+        np.testing.assert_array_equal(actual, expected)
+
     def test_patchify_image(self):
         # 1D, even division, along X
         im = np.array([0, 1, 2, 3])[..., np.newaxis, np.newaxis]
