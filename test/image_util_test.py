@@ -99,7 +99,7 @@ class Test(unittest.TestCase):
             if Path(path).is_file():
                 Path(path).unlink()
 
-    def test_unpatchify_stack(self):
+    def test_unpatchify_stack_roundtrip(self):
         OFFSET = (3, 7)
         expected = np.random.rand(*(4, 11, 13, 1))
         actual = patchify_stack(expected, (3, 4), OFFSET)
@@ -228,7 +228,6 @@ class Test(unittest.TestCase):
         self.IMAGES = {
             "snow": self._read_snow_image,
             "tulips": self._read_tulips_image,
-            "noise": self._generate_image,
         }
 
         self.side_len = np.iinfo(np.uint8).max
@@ -244,17 +243,7 @@ class Test(unittest.TestCase):
         self.fov_offset = (-35, 35)
         self.fov_radius = floor(self.side_len * self.fov_radius_ratio)
 
-        self.mask = generate_circular_fov_mask(
-            self.base_shape, self.fov_radius, self.fov_offset
-        )
-        self.mask_shape = self.mask.shape
-
         self.wait_time = 500
-
-        # ! set to be relatively prime to side_len
-        # ! different to check correct reshaping
-        self.patch_shape = (12, 13)
-        self.offsets = [(0, 0), (1, 0), (0, 1), (1, 1), self.patch_shape]
 
         self.res_path = PurePath("test") / "res"
         self.base_path = self.res_path / "base"
@@ -274,11 +263,6 @@ class Test(unittest.TestCase):
         factor = 3.0
         minimum = 50
         return (np.round(image / factor) + minimum).astype(np.uint8)
-
-    def _generate_image(self, shape=(100, 100)):
-        image = generate_noise(shape=shape, offsets=(3.14159, 2.71828))
-        image = image[..., np.newaxis]
-        return self.reduce_contrast(image)
 
     def _read_gray_image(self):
         out = self._read_tulips_image()
@@ -408,16 +392,9 @@ class Test(unittest.TestCase):
         con = consensus(data_mc, threshold="majority")
         self.assertTrue((con == RESULT_MIN).all())
 
-    def test_load_images(self):
-        images, names = load_images(self.base_path)
-        self.assertEqual(len(images), 2)
-        self.assertEqual(len(names), 2)
-        self.assertEqual(names[0], self.snow_image_path)
-        self.assertEqual(names[1], self.tulips_image_path)
-
     def test_overlay(self):
         bg = self._read_tulips_image()
-        fg = self._generate_image(shape=bg.shape[:-1])
+        fg = self._read_snow_image()
         color = [0.5, 1.0, 0.2]
         self.show(overlay(bg, fg, color, alpha=0.8, beta=0.2), "test: overlay")
         # TODO automate checking
@@ -466,15 +443,8 @@ class Test(unittest.TestCase):
         self.run_fn(self._generate_image(), self.standardize)
         # TODO add structured assertions here
 
-    # TODO test_save_images
-    # TODO test_mask_images
-    # TODO test_get_center
-    # TODO test_generate_circular_fov_mask
-    # TODO test_generate_noise
     # TODO gray_to_color
     # TODO resize
-    # TODO to_dtype
-    # TODO
 
 
 if __name__ == "__main__":

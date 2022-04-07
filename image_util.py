@@ -25,11 +25,6 @@ image stacks must have four dimensions (n,h,w,c). Most functions will handles
 this automatically, but not all.
 """
 
-# TODO
-# 3) automate test-cases (no visuals, just check against values from private
-#    data folder, use small, highly-compressed files)
-# 5) add more test-cases to get better coverage
-
 
 PathLike = Union[str, Path, PurePath]
 Number = Union[int, float]
@@ -246,74 +241,6 @@ def consensus(
     return out
 
 
-def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
-    """
-    Generates a circular field of view mask, with the interior of the circle
-    included. The circle is assumed to be centered on the image shape.
-    """
-    center = get_center(shape)
-    X, Y = np.meshgrid(np.arange(shape[0]) - center[0], np.arange(shape[1]) - center[1])
-    R2 = (X - offset[0]) ** 2 + (Y - offset[1]) ** 2
-    fov2 = fov_radius**2
-    mask = R2 <= fov2
-    return mask[..., np.newaxis]
-
-
-def generate_noise(
-    shape: Sequence[int],
-    offsets: Sequence[Union[float, int]] = None,
-    octaves: int = 1,
-    dtype=np.uint8,
-):
-    """
-    Generates a grayscale image of Perlin noise. Useful for testing.
-
-    Inputs:
-    1) shape - A sequence of two positive integers representing the desired output image size.
-    2) offsets - (default np.random.uniform) A sequence of floats of the same length as shape, allowing choice/random Perlin noise.
-    3) octaves - (default 1) A positive int denoting complexity of Perlin noise.
-    4) dtype - Output dtype
-
-    Oututs:
-    1) HW1 image of type dtype
-    """
-    assert len(shape) == 2
-    for x in shape:
-        assert isinstance(x, int)
-        assert 0 < x
-
-    assert isinstance(octaves, int)
-    assert 0 < octaves
-
-    scale = 0.1 * np.array(shape, dtype=np.float64).max()
-    if offsets is None:
-        offsets = np.random.uniform(-1000 * scale, 1000 * scale, 2, dtype=np.float64)
-
-    assert len(offsets) == len(shape)
-    for x in offsets:
-        assert isinstance(x, (float, int))
-        if isinstance(x, int):
-            x = float(x)
-        assert 0.0 < x
-
-    X, Y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-    X = X + offsets[0]
-    Y = Y + offsets[1]
-    noise_maker = np.vectorize(
-        lambda x, y: noise.pnoise2(x / scale, y / scale, octaves=octaves)
-    )
-    n = noise_maker(X, Y)
-    return to_dtype(n, dtype=dtype)
-
-
-def get_center(shape):
-    """
-    Returns the coordinates of the center point of an image in pixels, rounded
-    down.
-    """
-    return [floor(x / 2) for x in shape]
-
-
 def load(path: PathLike, force_rgb=False):
     """
     Loads an image from the supplied path in grayscale or RGB depending on the
@@ -344,43 +271,6 @@ def load(path: PathLike, force_rgb=False):
     assert image.ndim == 3
     assert _is_gray(image) or _is_color(image)
     return image
-
-
-def load_images(
-    folder, force_rgb=False, ext=None
-) -> Tuple[List[np.array], List[PurePath]]:
-    """
-    Loads a folder of images. If an extension is supplied, only images with that
-    extension will be loaded. Also returns the filenames of every loaded image.
-    """
-    image_files = get_contents(folder, ext)
-    images = []
-    names = []
-    for image_file in image_files:
-        try:
-            image = load(str(image_file), force_rgb=force_rgb)
-        except Exception as e:
-            print("warning while loading image: {:s}\n{:s}".format(image_file, str(e)))
-            continue
-        images.append(image)
-        names.append(image_file)
-
-    return images, names
-
-
-def mask_images(images, masks):
-    """
-    Masks out pixels in an image stack based on the masks. There must be either
-    one mask, or the same number of images and masks.
-    """
-    if masks.shape[0] == 1:
-        masks = np.repeat(masks, images.shape[0], axis=0)
-    assert masks.shape[0] == images.shape[0]
-
-    masked = images.copy()
-    threshold = (masks.max() - masks.min()) / 2.0
-    masked[masks <= threshold] = 0
-    return masked
 
 
 def montage(
@@ -770,24 +660,6 @@ def save(image, path: PathLike, dtype=None):
         im.save(str(path))
 
 
-def save_images(paths, image_stack):
-    """
-    Saves an image stack to disk as individual images using save() with index
-    appended to the supplied file name, joined by delimiter.
-
-    paths is the file paths for images to be written.
-
-    images is a Numpy array whose shape is of the form (NHWC) where N is the
-     number of images, HW are spatial dimensions, and C are the channels. N may
-     be any positive number, H and W may be any positive numbers, and C must be
-     1 or 3.
-    """
-    assert _is_stack(image_stack)
-    assert len(paths) == len(image_stack)
-    for path, image in zip(paths, image_stack):
-        save(image=image, path=path)
-
-
 def show(image, tag="UNLABELED_WINDOW"):
     """
     Displays an image in a new window labeled with tag.
@@ -994,16 +866,6 @@ def _compute_patch_padding(
     post_pad.append(0)  # channels
     padding = tuple(zip(pre_pad, post_pad))
     return padding
-
-
-def _deinterleave(c):
-    """
-    Separates two interleaved sequences into a tuple of two sequences of the
-    same type.
-    """
-    a = c[0::2]
-    b = c[1::2]
-    return a, b
 
 
 def _get_default_args(func):
