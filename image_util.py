@@ -1,92 +1,39 @@
 import functools
 import inspect
-from itertools import chain, cycle, islice
+import itertools
 from math import floor, isinf, isnan
 from pathlib import Path, PurePath
 from random import shuffle
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
-from PIL import Image
 import cv2
-import noise
 import numpy as np
 import scipy.stats
 import skimage
 import tifffile.tifffile as tf
+from PIL import Image
 
-from .inc.file_utils.file_utils import get_contents
+from inc.file_utils.file_utils import get_contents
 
-# TODO
-# 3) automate test-cases (no visuals, just check against values from private
-#    data folder, use small, highly-compressed files)
-# 5) add more test-cases to get better coverage
+"""
+This library is intended for 2D images, and stacks of 2D images. It is not
+suitable for general ND arrays.
+
+When using this library, all images must have three dimensions (h,w,c). All
+image stacks must have four dimensions (n,h,w,c). Most functions will handles
+this automatically, but not all.
+"""
 
 
 PathLike = Union[str, Path, PurePath]
 Number = Union[int, float]
 
 
-def _copy(fn) -> Callable:
-    @functools.wraps(fn)
-    def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
-        kwargs = _update_with_defaults(fn, kwargs)
-        # print(kwargs)
-        out = image.copy()
-        out = fn(out, *args, **kwargs)
-        return out
-
-    return wrapper
-
-
-def _as_dtype(dtype) -> Callable:
-    def decorator(fn):
-        @functools.wraps(fn)
-        def wrapper(image, *args, **kwargs):
-            kwargs = _update_with_defaults(fn, kwargs)
-            assert "use_signed_negative" in kwargs
-            use_signed_negative = kwargs["use_signed_negative"]
-            old_dtype = image.dtype
-            out = to_dtype(image, dtype=dtype, negative_in=use_signed_negative)
-            out = fn(out, *args, **kwargs)
-            # print(type(out))
-            out = to_dtype(out, dtype=old_dtype, negative_out=use_signed_negative)
-            assert out.dtype == old_dtype
-            return out
-
-        return wrapper
-
-    return decorator
-
-
-@_as_dtype(np.float64)
-def to_colorspace(
-    image: np.ndarray, fromspace: str, tospace: str, use_signed_negative: bool = False
-) -> np.ndarray:
-    out = skimage.color.convert_colorspace(
-        image, fromspace=fromspace.upper(), tospace=tospace.upper()
-    )
-    out = _add_channel_dim(out)
-    return out
-
-
-@_as_dtype(np.float64)
-@_copy
-def to_gray(image: np.ndarray, use_signed_negative: bool = False):
-    assert _is_image(image)
-    if not _is_color(image):
-        assert _is_gray(image)
-        return image
-
-    out = skimage.color.rgb2gray(image)
-    out = _add_channel_dim(out)
-
-    assert _is_image(out)
-    assert _is_gray(out)
-
-    return out
-
-
 def _as_colorspace(space: str, fromspace: str = "rgb") -> Callable:
+    """
+    Wraps a function in a roundtrip colorspace conversion.
+    """
+
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(image, *args, **kwargs):
@@ -113,6 +60,47 @@ def _as_colorspace(space: str, fromspace: str = "rgb") -> Callable:
         return wrapper
 
     return decorator
+
+
+def _as_dtype(dtype) -> Callable:
+    """
+    Wraps a function in round-trip dtype conversion. Useful for decorating
+    functions that require a specific dtype.
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(image, *args, **kwargs):
+            kwargs = _update_with_defaults(fn, kwargs)
+            assert "use_signed_negative" in kwargs
+            use_signed_negative = kwargs["use_signed_negative"]
+            old_dtype = image.dtype
+            out = to_dtype(image, dtype=dtype, negative_in=use_signed_negative)
+            out = fn(out, *args, **kwargs)
+            # print(type(out))
+            out = to_dtype(out, dtype=old_dtype, negative_out=use_signed_negative)
+            assert out.dtype == old_dtype
+            return out
+
+        return wrapper
+
+    return decorator
+
+
+def _copy(fn) -> Callable:
+    """
+    Wraps a function with a copy command.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(image: np.ndarray, *args, **kwargs) -> np.ndarray:
+        kwargs = _update_with_defaults(fn, kwargs)
+        # print(kwargs)
+        out = image.copy()
+        out = fn(out, *args, **kwargs)
+        return out
+
+    return wrapper
 
 
 @_as_dtype(np.float64)
@@ -252,79 +240,13 @@ def consensus(
     return out
 
 
-def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
-    """
-    Generates a circular field of view mask, with the interior of the circle
-    included. The circle is assumed to be centered on the image shape.
-    """
-    center = get_center(shape)
-    X, Y = np.meshgrid(np.arange(shape[0]) - center[0], np.arange(shape[1]) - center[1])
-    R2 = (X - offset[0]) ** 2 + (Y - offset[1]) ** 2
-    fov2 = fov_radius ** 2
-    mask = R2 <= fov2
-    return mask[..., np.newaxis]
-
-
-def generate_noise(
-    shape: Sequence[int],
-    offsets: Sequence[Union[float, int]] = None,
-    octaves: int = 1,
-    dtype=np.uint8,
-):
-    """
-    Generates a grayscale image of Perlin noise. Useful for testing.
-
-    Inputs:
-    1) shape - A sequence of two positive integers representing the desired output image size.
-    2) offsets - (default np.random.uniform) A sequence of floats of the same length as shape, allowing choice/random Perlin noise.
-    3) octaves - (default 1) A positive int denoting complexity of Perlin noise.
-    4) dtype - Output dtype
-
-    Oututs:
-    1) HW1 image of type dtype
-    """
-    assert len(shape) == 2
-    for x in shape:
-        assert isinstance(x, int)
-        assert 0 < x
-
-    assert isinstance(octaves, int)
-    assert 0 < octaves
-
-    scale = 0.1 * np.array(shape, dtype=np.float64).max()
-    if offsets is None:
-        offsets = np.random.uniform(-1000 * scale, 1000 * scale, 2, dtype=np.float64)
-
-    assert len(offsets) == len(shape)
-    for x in offsets:
-        assert isinstance(x, (float, int))
-        if isinstance(x, int):
-            x = float(x)
-        assert 0.0 < x
-
-    X, Y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-    X = X + offsets[0]
-    Y = Y + offsets[1]
-    noise_maker = np.vectorize(
-        lambda x, y: noise.pnoise2(x / scale, y / scale, octaves=octaves)
-    )
-    n = noise_maker(X, Y)
-    return to_dtype(n, dtype=dtype)
-
-
-def get_center(shape):
-    """
-    Returns the coordinates of the center point of an image in pixels, rounded
-    down.
-    """
-    return [floor(x / 2) for x in shape]
-
-
 def load(path: PathLike, force_rgb=False):
     """
     Loads an image from the supplied path in grayscale or RGB depending on the
-    source. If force_rgb is True, the image will be returned with 3 channels. If
-    the image has only one channel, then all channels will be identical.
+    source. If the source is RGB and has redundant channels, the image will be
+    converted to grayscale. If force_rgb is True, the image will be returned
+    with 3 channels. If the image has only one channel, then all channels will
+    be identical.
     """
     if PurePath(path).suffix.casefold() in (".tif", ".tiff"):
         image = tf.imread(path)
@@ -350,50 +272,13 @@ def load(path: PathLike, force_rgb=False):
     return image
 
 
-def load_images(
-    folder, force_rgb=False, ext=None
-) -> Tuple[List[np.array], List[PurePath]]:
-    """
-    Loads a folder of images. If an extension is supplied, only images with that
-    extension will be loaded. Also returns the filenames of every loaded image.
-    """
-    image_files = get_contents(folder, ext)
-    images = []
-    names = []
-    for image_file in image_files:
-        try:
-            image = load(str(image_file), force_rgb=force_rgb)
-        except Exception as e:
-            print("warning while loading image: {:s}\n{:s}".format(image_file, str(e)))
-            continue
-        images.append(image)
-        names.append(image_file)
-
-    return images, names
-
-
-def mask_images(images, masks):
-    """
-    Masks out pixels in an image stack based on the masks. There must be either
-    one mask, or the same number of images and masks.
-    """
-    if masks.shape[0] == 1:
-        masks = np.repeat(masks, images.shape[0], axis=0)
-    assert masks.shape[0] == images.shape[0]
-
-    masked = images.copy()
-    threshold = (masks.max() - masks.min()) / 2.0
-    masked[masks <= threshold] = 0
-    return masked
-
-
 def montage(
     images,
-    shape=None,
+    image_counts=None,
     mode="sequential",
     repeat=False,
     start=0,
-    maximum_images=36,
+    maximum_images=None,
     fill_value=0,
 ):
     """
@@ -426,43 +311,45 @@ def montage(
 
     assert images.ndim == 4
 
-    image_count = images.shape[0] - start
+    image_count_to_guide_shape = images.shape[0] - start
     if maximum_images is not None:
-        image_count = min(maximum_images, image_count)
+        # TODO may be redundant if shape is provided
+        image_count_to_guide_shape = min(maximum_images, image_count_to_guide_shape)
 
-    if shape is None:
-        shape = _optimize_shape(image_count)
-    elif isinstance(shape, (int, float)):
-        shape = _optimize_shape(image_count, width_height_aspect_ratio=shape)
+    if image_counts is None:
+        image_counts = _optimize_shape(image_count_to_guide_shape)
+    elif isinstance(image_counts, (int, float)):
+        image_counts = _optimize_shape(
+            image_count_to_guide_shape, width_height_aspect_ratio=image_counts
+        )
 
     indices = list(range(images.shape[0]))
 
     if mode == "random":
-        shuffle(images)
+        shuffle(indices)
     elif mode == "sequential":
         pass
     else:
         assert False
 
+    image_to_sample_count = int(np.array(image_counts).prod())
+    stop = min(image_to_sample_count, image_count_to_guide_shape) + start
+    indices = itertools.islice(indices, start, stop)
+
     if repeat:
-        iterator = cycle(indices)
+        indices = itertools.cycle(indices)
     else:
-        iterator = chain(indices, cycle([float("inf")]))
+        indices = itertools.chain(indices, itertools.cycle([float("inf")]))
 
-    stop = int(np.array(shape).prod() + start)
-    iterator = islice(iterator, start, stop)
+    indices = itertools.islice(indices, 0, image_to_sample_count)
 
-    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in iterator])
-    montage = montage.reshape((*shape, *images.shape[1:]))
+    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in indices])
+    montage_shape = [c * s for c, s in zip(image_counts, images.shape[1:-1])]
+    montage_shape.append(images.shape[-1])
+    montage_shape = tuple(montage_shape)
+    montage = unpatchify_image(montage, image_shape=montage_shape, offset=(0, 0))
 
-    a, b = _deinterleave(list(range(0, montage.ndim - 1)))
-    a, b = list(a), list(b)
-    dim_order = (*a, *b, montage.ndim - 1)
-    montage = montage.transpose(dim_order)
-
-    image_shape = np.array(shape) * np.array(images.shape[1:-1])
-    image_shape = np.append(image_shape, images.shape[-1])
-    return montage.reshape(image_shape)
+    return montage
 
 
 def overlay(
@@ -535,80 +422,76 @@ def gray_to_color(
     return out
 
 
-def patchify(image_stack, patch_shape, offset=(0, 0), *args, **kwargs):
+def patchify_stack(
+    stack: np.ndarray,
+    patch_shape: Tuple[int, int],
+    offset: Tuple[int, int],
+    *args,
+    **kwargs
+) -> np.ndarray:
     """
-    Transforms an image stack into a new stack made of tiled patches from images
-    of the original stack. The size of the patches is determined by patch_shape.
-    If patch_shape does not evenly divide the image shape, the excess is padded
-    with zeros, i.e. black.
-
-    If there are N images of size X by Y, and patches of size M by N are
-    requested, then the resulting stack will have N * ceil(X/M) * ceil(Y/N)
-    images. The first ceil(X/M) * ceil(Y/N) patches all come from the first
-    image, sampled along X first, then Y.
-
-    Returns a tuple consisting of an image stack of patches, the number of
-    patches in each dimension, and the padding used. The latter two values are
-    used for unpatching.
+    Transforms an image stack into a stack of patch stacks. Each patch has shape
+    of patch_shape.
 
     Inputs:
+        1. stack - (n,h,w,c) stack of images to transform into patches.
+        2. patch_shape - (h,w) shape of patches. Note channel dimension is left
+           unchanged.
+        3. offset - (h,w) position of offset of top-left corner of a patch. Pre-
+           and post-padding will occur to ensure complete coverage of the input.
+        4. *args, **kwargs - forwarded to np.pad()
 
-    image_stack: Stack of images of shape NHW or NHWC. Assumed to have 2D
-    images.
-
-    patch_shape: Spatial shape of patches. All channel information is retained.
-    If patch shape is size M by N, then the resulting stack of patches will have
-    N * ceil(X/M) * ceil(Y/N) images. Every ceil(X/M) * ceil(Y/N) patches in the
-    stack belong to a single image. Patches are sampled along X first, then Y.
-    If M divides X and N divides Y, then a non-zero offset will change the
-    number of patches.
-
-    offset: Offset is the spatial location of the lower-right corner of the
-    top-left patch relative to the image origin. Because the patch boundaries
-    are periodic, any value greater than patch_shape in any dimension is reduced
-    module patch_shape. The value of any pixels outside the image are assigned
-    according to arguments for np.pad().
+    Outputs:
+        1. (k,m,h,w,c) stack of k patch stacks with m patches.
     """
-    if image_stack.ndim == 3:
-        image_stack = image_stack[np.newaxis, ...]
-    assert _is_stack(image_stack)
+    assert _is_stack(stack)
+    return np.stack(
+        [
+            patchify_image(im, patch_shape=patch_shape, offset=offset, *args, **kwargs)
+            for im in stack
+        ]
+    )
 
+
+def patchify_image(
+    image: np.ndarray,
+    patch_shape: Tuple[int, int],
+    offset: Tuple[int, int] = (0, 0),
+    *args,
+    **kwargs
+) -> np.ndarray:
+    """
+    Transforms an image into a patch stack. Each patch has shape of patch_shape.
+
+    Inputs:
+        1. image - (h,w,c) stack of images to transform into patches.
+        2. patch_shape - (h,w) shape of patches. Note channel dimension is left
+           unchanged.
+        3. offset - (h,w) position of offset of top-left corner of a patch. Pre-
+           and post-padding will occur to ensure complete coverage of the input.
+        4. *args, **kwargs - forwarded to np.pad()
+
+    Outputs:
+        1. (n,h,w,c) stack of n patches.
+    """
+    assert _is_image(image)
     assert len(patch_shape) == 2
     assert len(offset) == 2
 
-    offset = [o % p for o, p in zip(offset, patch_shape)]
+    # prepare
+    offset = tuple([o % s for o, s in zip(offset, patch_shape)])
 
-    # determine pre padding
-    pre_padding = [((p - o) % p) for o, p in zip(offset, patch_shape)]
-    pre_padding = np.append(pre_padding, 0)
-    pre_padding = np.insert(pre_padding, 0, 0)
-    # compute post padding from whatever is left
-    pre_image_shape = [
-        s + pre for s, pre in zip(image_stack.shape[1:-1], pre_padding[1:-1])
-    ]
-    post_padding = patch_shape - np.remainder(pre_image_shape, patch_shape)
-    post_padding = np.append(post_padding, 0)
-    post_padding = np.insert(post_padding, 0, 0)
-    padding = list(zip(pre_padding, post_padding))
-    padded = np.pad(image_stack, padding, *args, **kwargs)
-    out_padding = padding[1:-1]
+    # padding
+    padding = _compute_patch_padding(
+        patch_shape=patch_shape, offset=offset, image_space_shape=image.shape[:-1]
+    )
+    padded_image = np.pad(image, padding, *args, **kwargs)
 
-    patch_shape = np.array(patch_shape)
-    patch_counts = np.array([x // y for x, y in zip(padded.shape[1:-1], patch_shape)])
-    patches_shape = _interleave(patch_counts, patch_shape)
-    patches_shape = np.append(patches_shape, image_stack.shape[-1])
-    patches_shape = np.insert(patches_shape, 0, -1)
-    patches = padded.reshape(patches_shape)
+    # patching
+    stacked_shape = (-1, *patch_shape, image.shape[-1])
+    patches = padded_image.reshape(stacked_shape)
 
-    dim_order = _deinterleave(range(1, patches.ndim - 1))
-    dim_order = np.append(dim_order, patches.ndim - 1)
-    dim_order = np.insert(dim_order, 0, 0)
-    patches = patches.transpose(dim_order)
-
-    stacked_shape = (-1, *patch_shape, image_stack.shape[-1])
-    patches = patches.reshape(stacked_shape)
-
-    return patches, patch_counts, out_padding
+    return patches
 
 
 def rescale(
@@ -627,7 +510,9 @@ def rescale(
     dtype may be used to change the dtype. The function uses np.float64 as a
     common language. All scaling is performed linearly.
 
-    If a dtype is supplied, the output image will have that dtype.
+    If a dtype is supplied, the output image will have that dtype. Do not use
+    this function for thresholding with dtype np.bool. Output images are
+    ultimately converted using as_type().
 
     If clip is set to True, the resulting image values are clipped to the
     narrower of out_range or the limits of the output dtype. Naturally, values
@@ -699,11 +584,10 @@ def rescale(
     assert out_lo <= out_hi
     out_range = (out_lo, out_hi)
 
-    if in_range[0] == in_range[1] or out_range[0] == out_range[1]:
-        out = image
-    else:
-        med = (image - in_range[0]) / (in_range[1] - in_range[0])
-        out = med * (out_range[1] - out_range[0]) + out_range[0]
+    out = image
+    if in_range[0] != in_range[1] and out_range[0] != out_range[1]:
+        out = (out - in_range[0]) / (in_range[1] - in_range[0])
+        out = out * (out_range[1] - out_range[0]) + out_range[0]
 
     if clip:
         out = np.clip(out, out_range[0], out_range[1])
@@ -751,7 +635,7 @@ def resize(image, method="linear", size=None, scale=1.0):
         assert isinstance(size[0], int)
         assert isinstance(size[1], int)
 
-        out = cv2.resize(image, size)
+        out = cv2.resize(image, size, interpolation=METHODS[method])
     elif scale is None and size is None:
         assert False
     else:
@@ -773,24 +657,6 @@ def save(image, path: PathLike, dtype=None):
     else:
         im = Image.fromarray(image)
         im.save(str(path))
-
-
-def save_images(paths, image_stack):
-    """
-    Saves an image stack to disk as individual images using save() with index
-    appended to the supplied file name, joined by delimiter.
-
-    paths is the file paths for images to be written.
-
-    images is a Numpy array whose shape is of the form (NHWC) where N is the
-     number of images, HW are spatial dimensions, and C are the channels. N may
-     be any positive number, H and W may be any positive numbers, and C must be
-     1 or 3.
-    """
-    assert _is_stack(image_stack)
-    assert len(paths) == len(image_stack)
-    for path, image in zip(paths, image_stack):
-        save(image=image, path=path)
 
 
 def show(image, tag="UNLABELED_WINDOW"):
@@ -835,8 +701,22 @@ def standardize(images):
     return standardized
 
 
+@_as_dtype(np.float64)
+def to_colorspace(
+    image: np.ndarray, fromspace: str, tospace: str, use_signed_negative: bool = False
+) -> np.ndarray:
+    """
+    Uses skimage colorspaces in `skimage.color.*`.
+    """
+    out = skimage.color.convert_colorspace(
+        image, fromspace=fromspace.upper(), tospace=tospace.upper()
+    )
+    out = _add_channel_dim(out)
+    return out
+
+
 def to_dtype(
-    image: np.ndarray, dtype, negative_in: bool = False, negative_out: bool = False
+    image: np.ndarray, dtype, negative_in: bool = True, negative_out: bool = True
 ) -> np.ndarray:
     """
     Converts image to desired dtype by rescaling input dtype value range into
@@ -848,9 +728,9 @@ def to_dtype(
     1) image - 2D image to convert to dtype.
     2) dtype - Desired output dtype.
     3) negative_in - (bool) Use full signed integer range for input dtype.
-       Default is False.
+       Default is True.
     4) negative_out - (bool) Use full signed integer range for output dtype.
-       Default is False.
+       Default is True.
 
     IMPORTANT: For single-channel images, most file formats only support
     unsigned integer types. TIFF allow signed integer types. For multi-channel
@@ -861,122 +741,88 @@ def to_dtype(
     return rescale(image, out_range=out_range, in_range=in_range, dtype=dtype)
 
 
-def unpatchify(patches, patch_counts, padding):
+@_as_dtype(np.float64)
+@_copy
+def to_gray(image: np.ndarray, use_signed_negative: bool = False):
+    assert _is_image(image)
+    if not _is_color(image):
+        assert _is_gray(image)
+        return image
+
+    out = skimage.color.rgb2gray(image)
+    out = _add_channel_dim(out)
+
+    assert _is_image(out)
+    assert _is_gray(out)
+
+    return out
+
+
+def unpatchify_stack(
+    patches: np.ndarray,
+    stack_shape: Tuple[int, int, int, int],
+    offset: Tuple[int, int],
+) -> np.ndarray:
     """
-    Inverse of patchify(). Transforms an image stack of patches produced using
-    patchify() back into an image stack of the same shape as the original
-    images. Requires the patch_count and padding returned by patchify().
+    Inverse of patchify_stack(). Transforms output of patchify_stack() back into
+    a stack of images of the same shape input to patchify_stack().
+
+    Inputs:
+        1. patches - (m,n,h,w,c) stack of m patch stacks of n patches
+        2. stack_shape - (n,h,w,c) of original stack
+        3. offset - (h,w) position of offset passed to patchify_stack()
+
+    Outputs:
+        1. stack of k images with shape stack_shape
     """
-    chunk_len = np.array(patch_counts).prod()
-    base_shape = np.array(patch_counts) * np.array(patches.shape[1:-1])
-    image_shape = np.append(base_shape, patches.shape[-1])
-    image_count = patches.shape[0] // chunk_len
-    chunk_shape = (*patch_counts, *patches.shape[1:])
-    images = []
-    for i in range(image_count):
-        chunk = patches[i * chunk_len : (i + 1) * chunk_len]
-        chunk = np.reshape(chunk, chunk_shape)
-        chunk = np.transpose(chunk, (0, 2, 1, 3, 4))
-        images.append(np.reshape(chunk, image_shape))
-    images = np.stack(images)
-    padding = list(zip(*padding))
-    pre_padding = padding[0]
-    post_padding = padding[1]
-    space_shape = [
-        base - pre - post
-        for base, pre, post in zip(base_shape, pre_padding, post_padding)
-    ]
-    # space_shape = base_shape - padding
-    slices = [slice(pre, pre + x) for pre, x in zip(pre_padding, space_shape)]
-    slices.append(slice(None))
-    slices.insert(0, slice(None))
-    images = images[tuple(slices)]
-    return images
+    assert patches.ndim == 5
+    return np.stack(
+        [
+            unpatchify_image(im, image_shape=stack_shape[1:], offset=offset)
+            for im in patches
+        ]
+    )
 
 
-def _deinterleave(c):
+def unpatchify_image(
+    patches: np.ndarray, image_shape: Tuple[int, int, int], offset: Tuple[int, int]
+):
     """
-    Separates two interleaved sequences into a tuple of two sequences of the
-    same type.
+    Inverse of patchify(). Transforms an patch stack into an image of shape
+    image_shape.
+
+    Inputs:
+        1. patches - (n,h,w,c) patch stack of n patches
+        2. image_shape (h,w,c) of original image
+        3. offset - (h,w) position of offset passed to patchify_image()
     """
-    a = c[0::2]
-    b = c[1::2]
-    return a, b
+    assert _is_stack(patches)
+    assert len(image_shape) == 3
 
+    # prepare
+    patch_shape = patches.shape[1:-1]
 
-def _get_dtype_range(dtype, allow_negative=False):
-    if np.issubdtype(dtype, np.integer):
-        ii = np.iinfo(dtype)
-        if not allow_negative and np.issubdtype(dtype, np.signedinteger):
-            value = (0, ii.max)
-        else:
-            value = (ii.min, ii.max)
-    elif np.issubdtype(dtype, np.floating):
-        value = (0.0, 1.0)
-    elif dtype == np.bool:
-        value = (False, True)
-    else:
-        raise TypeError("supplied dtype is unsupported: {:s}".format(str(dtype)))
-    return value
+    # rebuild padded image
+    padding = _compute_patch_padding(
+        patch_shape=patch_shape, offset=offset, image_space_shape=image_shape[:-1]
+    )
+    padded_image_shape = [x + p[0] + p[1] for p, x in zip(padding, image_shape)]
+    padded_image = patches.reshape(padded_image_shape)
 
+    # extract original image
+    starts = [(s - o) % s for s, o in zip(patch_shape, offset)]
+    slicer = [slice(st, st + x) for st, x in zip(starts, image_shape)]
+    slicer.append(slice(None))
+    slicer = tuple(slicer)
+    image = padded_image[slicer]
 
-def _get_image_or_blank(images, index, fill_value=0):
-    try:
-        return images[index]
-    except Exception as e:
-        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
-
-
-def _interleave(a, b):
-    """
-    Interleaves two sequences of the same type into a single sequence.
-    """
-    c = np.empty((a.size + b.size), dtype=a.dtype)
-    c[0::2] = a
-    c[1::2] = b
-    return c
-
-
-def _is_color(image: np.ndarray) -> bool:
-    if image.ndim == 3:
-        is_rgb = image.shape[-1] == 3
-    else:
-        is_rgb = False
-    return is_rgb
-
-
-def _is_gray(image: np.ndarray) -> bool:
-    if image.ndim > 2:
-        is_gray = image.shape[-1] == 1
-    else:
-        is_gray = False
-    return is_gray
-
-
-def _optimize_shape(count, width_height_aspect_ratio=1.0):
-    """
-    Computes the optimal X by Y shape of count objects given a desired
-    width-to-height aspect ratio.
-    """
-    N = count
-    W = np.arange(1, N).astype(np.uint32)
-    H = np.ceil(N / W).astype(np.uint32)
-    closest = np.argmin(np.abs((W / H) - width_height_aspect_ratio))
-    return H[closest], W[closest]
+    return image
 
 
 def _add_channel_dim(image: np.ndarray) -> np.ndarray:
     if image.ndim == 2:
         image = image[..., np.newaxis]
     return image
-
-
-def _is_stack(image):
-    return image.ndim == 4
-
-
-def _is_image(image):
-    return image.ndim == 3
 
 
 @_as_colorspace("hsv")
@@ -1006,6 +852,21 @@ def _clahe_channel(
     return out
 
 
+def _compute_patch_padding(
+    patch_shape: Tuple[int, int],
+    offset: Tuple[int, int],
+    image_space_shape: Tuple[int, int],
+) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
+    pre_pad = [(s - o) % s for s, o in zip(patch_shape, offset)]
+    pre_pad.append(0)  # channels
+    post_pad = [
+        (s - p - x) % s for s, p, x in zip(patch_shape, pre_pad, image_space_shape)
+    ]
+    post_pad.append(0)  # channels
+    padding = tuple(zip(pre_pad, post_pad))
+    return padding
+
+
 def _get_default_args(func):
     signature = inspect.signature(func)
     return {
@@ -1013,6 +874,65 @@ def _get_default_args(func):
         for k, v in signature.parameters.items()
         if v.default is not inspect.Parameter.empty
     }
+
+
+def _get_dtype_range(dtype, allow_negative=False):
+    if np.issubdtype(dtype, np.integer):
+        ii = np.iinfo(dtype)
+        if not allow_negative and np.issubdtype(dtype, np.signedinteger):
+            value = (0, ii.max)
+        else:
+            value = (ii.min, ii.max)
+    elif np.issubdtype(dtype, np.floating):
+        value = (0.0, 1.0)
+    elif dtype == np.bool:
+        value = (False, True)
+    else:
+        raise TypeError("supplied dtype is unsupported: {:s}".format(str(dtype)))
+    return value
+
+
+def _get_image_or_blank(images, index, fill_value=0):
+    try:
+        return images[index]
+    except Exception as e:
+        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
+
+
+def _is_color(image: np.ndarray) -> bool:
+    if image.ndim == 3:
+        is_rgb = image.shape[-1] == 3
+    else:
+        is_rgb = False
+    return is_rgb
+
+
+def _is_gray(image: np.ndarray) -> bool:
+    if image.ndim > 2:
+        is_gray = image.shape[-1] == 1
+    else:
+        is_gray = False
+    return is_gray
+
+
+def _is_image(image):
+    return image.ndim == 3
+
+
+def _is_stack(image):
+    return image.ndim == 4
+
+
+def _optimize_shape(count, width_height_aspect_ratio=1.0):
+    """
+    Computes the optimal X by Y shape of count objects given a desired
+    width-to-height aspect ratio.
+    """
+    N = count
+    W = np.arange(1, N).astype(np.uint32)
+    H = np.ceil(N / W).astype(np.uint32)
+    closest = np.argmin(np.abs((W / H) - width_height_aspect_ratio))
+    return H[closest], W[closest]
 
 
 def _update_with_defaults(fn: Callable, kwargs: dict) -> dict:
